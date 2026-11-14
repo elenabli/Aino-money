@@ -18,7 +18,11 @@ const BASKET_LABELS: Record<string, string> = {
 
 type Track = 'category' | 'basket' | 'balance' | 'benchmark'
 
-export function MonthView({ customerId }: { customerId: string }) {
+export function MonthView({ customerId, onOpenTransactions, onOpenPayday }: {
+  customerId: string
+  onOpenTransactions: () => void
+  onOpenPayday: () => void
+}) {
   const [data, setData] = useState<MonthlyOverview | null>(null)
   const [bench, setBench] = useState<Benchmark | null>(null)
   const [plan, setPlan] = useState<CoachingPlan | null>(null)
@@ -103,6 +107,11 @@ export function MonthView({ customerId }: { customerId: string }) {
           <small>Safe / week</small>
           <strong>{data.safe_to_spend.safe_to_spend_weekly.toFixed(0)} €</strong>
         </div>
+      </div>
+
+      <div className="track-chips">
+        <button onClick={onOpenTransactions}>Browse transactions</button>
+        <button onClick={onOpenPayday}>Check before payday</button>
       </div>
 
       <div className="track-picker">

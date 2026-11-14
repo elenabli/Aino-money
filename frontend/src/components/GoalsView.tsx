@@ -5,18 +5,22 @@ import {
   createGoal,
   fastForward,
   fetchChallenges,
+  fetchChallengeQuote,
   fetchGoal,
   type ChallengeProgress,
   type Goal,
+  type ExperimentDraft,
 } from '../api'
 
 const CATEGORIES = ['Restaurants', 'Entertainment', 'Groceries', 'Lifestyle', 'Travel']
 
 export function GoalsView({
   customerId,
+  draft,
   onResetSimulation,
 }: {
   customerId: string
+  draft?: ExperimentDraft
   onResetSimulation: () => void
 }) {
   const [goal, setGoal] = useState<Goal | null>(null)
@@ -28,18 +32,32 @@ export function GoalsView({
   const [experimentError, setExperimentError] = useState('')
 
   const [challenge, setChallenge] = useState<ChallengeProgress | null>(null)
-  const [chCategory, setChCategory] = useState(CATEGORIES[0])
-  const [chPct, setChPct] = useState(20)
-  const [chDays, setChDays] = useState(14)
+  const [chCategory, setChCategory] = useState(draft?.category ?? CATEGORIES[0])
+  const [chPct, setChPct] = useState(draft?.pct ?? 20)
+  const [chDays, setChDays] = useState(draft?.days ?? 14)
+  const [replace, setReplace] = useState(false)
+  const [challengeLoaded, setChallengeLoaded] = useState(false)
   const [chBusy, setChBusy] = useState(false)
   const [ffBusy, setFfBusy] = useState(false)
   const [resetBusy, setResetBusy] = useState(false)
+  const [quote, setQuote] = useState<{ key: string; budget?: number }>()
+  const quoteKey = JSON.stringify([chCategory, chPct, chDays])
+  const showingDraft = challengeLoaded && (!challenge?.active || replace)
+
+  useEffect(() => {
+    if (!showingDraft) return
+    const controller = new AbortController()
+    fetchChallengeQuote(customerId, { category: chCategory, pct: chPct, days: chDays }, controller.signal)
+      .then(({ budget_eur }) => setQuote({ key: quoteKey, budget: budget_eur }))
+      .catch(() => { if (!controller.signal.aborted) setQuote({ key: quoteKey }) })
+    return () => controller.abort()
+  }, [customerId, chCategory, chPct, chDays, showingDraft, quoteKey])
 
   useEffect(() => {
     setGoal(null)
     setChallenge(null)
     fetchGoal(customerId).then(setGoal).catch(() => setGoalError('Couldn’t load your savings goal.'))
-    fetchChallenges(customerId).then(setChallenge).catch(() => setExperimentError('Couldn’t load experiment progress.'))
+    fetchChallenges(customerId).then((result) => { setChallenge(result); setChallengeLoaded(true) }).catch(() => setExperimentError('Couldn’t load experiment progress.'))
   }, [customerId])
 
   async function submit(e: React.FormEvent) {
@@ -62,6 +80,8 @@ export function GoalsView({
     try {
       await createChallenge(customerId, chCategory, chPct, chDays)
       setChallenge(await fetchChallenges(customerId))
+      setReplace(false)
+      onResetSimulation()
     } catch {
       setExperimentError('Couldn’t start your experiment. Try again.')
     } finally {
@@ -179,23 +199,27 @@ export function GoalsView({
 
       <div className="welcome">
         <h1>Money experiment</h1>
+        {draft && <p>Aino suggested {draft.pct}% less on {draft.category.toLowerCase()} for {draft.days} days.</p>}
         <p>
           Turn advice into a measurable test. I'll track your progress from your transactions.
         </p>
 
         {experimentError && <p role="alert">{experimentError}</p>}
-        {!a ? (
+        {draft && a && !replace && (
+          <button className="reset-btn" onClick={() => setReplace(true)}>Set up the suggested experiment</button>
+        )}
+        {!a || replace ? (
           <div className="goal-form">
             <div className="ch-row">
               <select aria-label="Spending category" value={chCategory} onChange={(e) => setChCategory(e.target.value)}>
-                {CATEGORIES.map((c) => (
+                {Array.from(new Set([...CATEGORIES, chCategory])).map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
                 ))}
               </select>
               <select aria-label="Spending reduction" value={chPct} onChange={(e) => setChPct(Number(e.target.value))}>
-                {[10, 20, 30, 50].map((p) => (
+                {Array.from(new Set([10, 20, 30, 50, chPct])).sort((a, b) => a - b).map((p) => (
                   <option key={p} value={p}>
                     −{p}%
                   </option>
@@ -209,8 +233,15 @@ export function GoalsView({
                 ))}
               </select>
             </div>
-            <button className="big-cta" onClick={startChallenge} disabled={chBusy}>
-              {chBusy ? 'Starting…' : 'Start experiment'}
+            {showingDraft && (
+              <p role="status">{quote?.key !== quoteKey
+                ? 'Calculating the suggested budget…'
+                : quote.budget === undefined ? 'The budget preview is unavailable.'
+                  : `Target for ${chDays} days: €${quote.budget.toFixed(2)}.`}</p>
+            )}
+            {replace && <p>Replacing the experiment clears its simulated progress.</p>}
+            <button className="big-cta" onClick={startChallenge} disabled={chBusy || !challengeLoaded}>
+              {chBusy ? 'Starting…' : replace ? 'Replace current experiment' : 'Start experiment'}
             </button>
           </div>
         ) : (

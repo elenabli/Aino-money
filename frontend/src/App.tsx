@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { type Persona } from './api'
-import { ChatView } from './components/ChatView'
+import { type Persona, type SpendingScope, type ExperimentDraft } from './api'
+import { ChatView, type CoachTurn } from './components/ChatView'
 import { GoalsView } from './components/GoalsView'
 import { MonthView } from './components/MonthView'
 import { PersonaView } from './components/PersonaView'
+import { TransactionsView } from './components/TransactionsView'
+import { PaydayCard } from './components/PaydayCard'
 import { SimulateView } from './components/SimulateView'
 import { ChartIcon, ChatIcon, DiceIcon, TargetIcon, UserIcon } from './components/icons'
 
@@ -15,7 +17,7 @@ const TABS = [
   { id: 'sim', label: 'Simulate', Icon: DiceIcon },
 ] as const
 
-type Tab = (typeof TABS)[number]['id']
+type Tab = (typeof TABS)[number]['id'] | 'transactions' | 'payday'
 
 function storedPersona(): Persona | null {
   try {
@@ -33,14 +35,28 @@ export default function App() {
   const [tab, setTab] = useState<Tab>(persona ? 'chat' : 'persona')
   const [hasOpenedSimulation, setHasOpenedSimulation] = useState(false)
   const [simulationVersion, setSimulationVersion] = useState(0)
+  const [scope, setScope] = useState<SpendingScope>({})
+  const [draft, setDraft] = useState<ExperimentDraft>()
+  const [linkedTurn, setLinkedTurn] = useState<CoachTurn | null>(null)
+
+  function openTransactions(nextScope: SpendingScope = {}) {
+    setScope(nextScope)
+    setTab('transactions')
+  }
 
   function openTab(next: Tab) {
+    if (next === 'goals') setDraft(undefined)
     if (next === 'sim') setHasOpenedSimulation(true)
     setTab(next)
   }
 
   function selectPersona(p: Persona) {
-    if (persona?.id !== p.id) setHasOpenedSimulation(false)
+    if (persona?.id !== p.id) {
+      setHasOpenedSimulation(false)
+      setScope({})
+      setLinkedTurn(null)
+      setDraft(undefined)
+    }
     setPersona(p)
     setTab('chat')
     try {
@@ -69,14 +85,41 @@ export default function App() {
       )}
       {cid && (
         <div className="view" style={{ display: tab === 'chat' ? 'flex' : 'none' }}>
-          <ChatView key={cid} customerId={cid} active={tab === 'chat'} onOpenSimulation={() => openTab('sim')} onOpenGoals={() => openTab('goals')} />
+          <ChatView
+            key={cid}
+            customerId={cid}
+            active={tab === 'chat'}
+            linkedTurn={linkedTurn}
+            onConsumeTurn={() => setLinkedTurn(null)}
+            onOpenSimulation={() => openTab('sim')}
+            onOpenPayday={() => openTab('payday')}
+            onOpenTransactions={openTransactions}
+            onOpenGoals={(experiment) => { setDraft(experiment); setTab('goals') }}
+          />
         </div>
       )}
       {cid && tab === 'month' && (
-        <div className="view"><MonthView customerId={cid} /></div>
+        <div className="view"><MonthView customerId={cid} onOpenTransactions={() => openTransactions()} onOpenPayday={() => openTab('payday')} /></div>
       )}
       {cid && tab === 'goals' && (
-        <div className="view"><GoalsView customerId={cid} onResetSimulation={() => setSimulationVersion((version) => version + 1)} /></div>
+        <div className="view"><GoalsView customerId={cid} draft={draft} onResetSimulation={() => setSimulationVersion((version) => version + 1)} /></div>
+      )}
+      {cid && tab === 'transactions' && (
+        <div className="view">
+          <TransactionsView
+            key={JSON.stringify(scope)}
+            customerId={cid}
+            scope={scope}
+            onClear={() => openTransactions()}
+            onAsk={(query, question) => {
+              setLinkedTurn({ question, prompt: 'transaction_spending', scope: query })
+              setTab('chat')
+            }}
+          />
+        </div>
+      )}
+      {cid && tab === 'payday' && (
+        <div className="view"><main><PaydayCard customerId={cid} /></main></div>
       )}
       {cid && hasOpenedSimulation && (
         <div className="view" style={{ display: tab === 'sim' ? 'flex' : 'none' }}>
@@ -88,7 +131,7 @@ export default function App() {
         {TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
-            className={tab === id ? 'active' : ''}
+            className={tab === id || (id === 'month' && (tab === 'transactions' || tab === 'payday')) ? 'active' : ''}
             aria-current={tab === id ? 'page' : undefined}
             disabled={id !== 'persona' && !cid}
             onClick={() => openTab(id)}

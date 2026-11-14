@@ -74,11 +74,13 @@ TOOL_SPECS = [
         "type": "function",
         "function": {
             "name": "spend_by_category",
-            "description": "Monthly spending per category for the last N months (default 3). Optional category filter. Valid categories: Entertainment, Groceries, Health, Home & Tech, Housing, Restaurants, Transportation, Travel, Utilities. Use category 'taxis' for taxi rides.",
+            "description": "Monthly spending per category for the last N months (default 3). Optional category filter. Valid categories: Entertainment, Groceries, Health, Home & Tech, Housing, Restaurants, Transportation, Travel, Utilities. Use category 'taxis' for taxi rides. For calendar periods pass inclusive start and end dates.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "months": {"type": "integer", "minimum": 1, "maximum": 24},
+                    "start": {"type": "string", "description": "Inclusive YYYY-MM-DD"},
+                    "end": {"type": "string", "description": "Inclusive YYYY-MM-DD"},
                     "category": {"type": "string", "description": "Optional category name, e.g. Restaurants, or 'taxis'"},
                 },
                 "required": [],
@@ -261,7 +263,7 @@ TOOL_SPECS = [
 ]
 
 TOOL_IMPL = {
-    "spend_by_category": lambda cid, a: tools.spend_by_category(cid, a.get("months", 3), a.get("category")),
+    "spend_by_category": lambda cid, a: tools.spend_by_category(cid, a.get("months", 3), a.get("category"), a.get("start"), a.get("end")),
     "basket_breakdown": lambda cid, a: tools.basket_breakdown(cid, a.get("months", 3)),
     "monthly_income": lambda cid, a: tools.monthly_income(cid),
     "current_balance": lambda cid, a: tools.current_balance(cid),
@@ -386,10 +388,40 @@ def _make_chart(tool_name: str, result: dict) -> dict | None:
     return None
 
 
-CoachPrompt = Literal["weekly_budget", "spending_profile", "dining_savings"]
+CoachPrompt = Literal["weekly_budget", "spending_profile", "dining_savings", "monthly_spending", "transaction_spending"]
 
 
-def starter_answer(prompt: CoachPrompt, customer_id: str) -> dict:
+def _answer_metadata(trace: list[dict]) -> dict:
+    metadata: dict = {"evidence": []}
+    for entry in trace:
+        tool, result = entry["tool"], entry["result"]
+        if tool in {"spend_by_category", "transaction_list", "basket_breakdown"}:
+            scope = {"start": result["start"], "end": result["end"], "category": result.get("category")}
+            if tool == "basket_breakdown":
+                for row in result["totals"]:
+                    metadata["evidence"].append({
+                        **scope, "basket": row["basket"], "label": BASKET_LABELS.get(row["basket"], row["basket"]),
+                    })
+            else:
+                metadata["evidence"].append({
+                    **scope, "basket": result.get("basket"), "count": result["count"],
+                    "label": result.get("category") or BASKET_LABELS.get(result.get("basket"), "Spending"),
+                })
+        if (
+            tool == "what_if"
+            and result.get("resolved_category")
+            and tools.resolve_category(result["category"])[1] is None
+            and -100 < result["change_pct"] < 0
+        ):
+            metadata["experiment"] = {
+                "category": result["resolved_category"], "pct": -result["change_pct"], "days": 14,
+            }
+    return metadata
+
+
+def starter_answer(prompt: CoachPrompt, customer_id: str, category: str | None = None,
+                   month_offset: int = 1, start: str | None = None, end: str | None = None,
+                   basket: str | None = None) -> dict:
     args = {}
     if prompt == "weekly_budget":
         tool_name = "safe_to_spend"
@@ -409,20 +441,31 @@ def starter_answer(prompt: CoachPrompt, customer_id: str) -> dict:
             answer = f"{label} was your largest spending basket across the three months shown (€{top['total_eur']:.2f})."
         else:
             answer = "There’s no spending in the three months covered by this demo."
+    elif prompt in {"monthly_spending", "transaction_spending"}:
+        if prompt == "monthly_spending":
+            start = tools.months_ago(month_offset + 1)
+            end = (datetime.date.fromisoformat(tools.months_ago(month_offset)) - datetime.timedelta(days=1)).isoformat()
+        tool_name = "transaction_list"
+        args = {"start": start, "end": end, "category": category, "basket": basket}
+        result = tools.transaction_list(customer_id, **args)
+        count = result["count"]
+        answer = (
+            f"From {result['start']} to {result['end']}, you spent €{result['total_eur']:.2f} "
+            f"across {count} {'transaction' if count == 1 else 'transactions'}."
+        )
+        # Row-level evidence is fetched from the transactions endpoint when opened.
+        result.pop("rows")
     else:
         tool_name = "what_if"
-        args = {"category": "Restaurants", "change_pct": -20}
+        args = {"category": category or "Restaurants", "change_pct": -20}
         result = tools.what_if(customer_id, **args)
         answer = (
-            f"Spending 20% less at restaurants could free up €{result['saved_monthly_eur']:.2f} a month, "
+            f"Spending 20% less on {args['category'].lower()} could free up €{result['saved_monthly_eur']:.2f} a month, "
             f"or €{result['saved_yearly_eur']:.2f} a year, based on your recent spending."
         )
 
-    return {
-        "answer": answer,
-        "trace": [{"tool": tool_name, "args": args, "result": result}],
-        "chart": _make_chart(tool_name, result),
-    }
+    trace = [{"tool": tool_name, "args": args, "result": result}]
+    return {"answer": answer, "trace": trace, "chart": _make_chart(tool_name, result), **_answer_metadata(trace)}
 
 
 def chat(messages: list[dict], customer_id: str) -> dict:
@@ -433,7 +476,8 @@ def chat(messages: list[dict], customer_id: str) -> dict:
         timeout=20.0,
         max_retries=0,
     )
-    msgs = [{"role": "system", "content": SYSTEM_PROMPT}, *messages]
+    system = f"{SYSTEM_PROMPT}\nThe demo transaction date is {tools.ref_date().isoformat()}. Resolve relative dates against it."
+    msgs = [{"role": "system", "content": system}, *messages]
 
     trace: list[dict] = []
     chart: dict | None = None
@@ -446,7 +490,7 @@ def chat(messages: list[dict], customer_id: str) -> dict:
         )
         msg = resp.choices[0].message
         if not msg.tool_calls:
-            result = {"answer": msg.content or "", "trace": trace, "chart": chart}
+            result = {"answer": msg.content or "", "trace": trace, "chart": chart, **_answer_metadata(trace)}
             _log_chat(customer_id, messages, result)
             return result
 

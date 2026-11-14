@@ -16,6 +16,8 @@ See [FEATURES.md](FEATURES.md) for the feature map and how each piece is suppose
 
 ## Pipeline
 
+Keep the provided transaction and customer exports at the workspace root. Raw datasets, generated receipts and local database files are ignored by Git.
+
 If `backend/data/spanki.duckdb` already exists, use it for the demo. Run the
 pipeline to create it or after changing the source data.
 
@@ -34,13 +36,11 @@ cd frontend && npm run dev   # http://localhost:5173, proxies /api -> :8000
 
 ## Walk through the coach demo
 
-1. Choose a persona to open Aino. Start with **Check my weekly budget**.
-2. Select **Try a simulated purchase** and replay a purchase. Compare the weekly
-   estimates before and after, then return to **Coach** and select **Refresh my weekly budget**.
-3. Choose **Find savings from eating out**. Follow the link to **Goals** to build
-   a savings plan or start a restaurant spending experiment.
-4. Fast-forward the experiment to see simulated progress. Use **Reset simulated spending**
-   to replay it. This also clears simulated purchases for that persona.
+1. Choose a persona and select **See last month’s dining spending** or **See last month’s taxi spending**. Open **Show transactions** to inspect the exact date range and matching recorded expenses. Use **Ask Aino about this spending** on a row to return to the coach.
+2. Return to **Coach** to compare the previous month or ask **What if I ate out 20% less?**. Open the suggested experiment to review its prefilled settings and euro target, then start and fast-forward it.
+3. Select **Check my weekly budget**, then **Check what fits before payday**. Enter a purchase and the reserve to keep. Expand the assumptions to see which predicted bills were counted.
+4. Open **Month → Browse transactions** at any time. **Pay attention** highlights flexible and unexpected expenses. **Good** marks routine essentials and savings. Both labels describe the basket and are review cues.
+5. In **Simulate**, replay a purchase to see the change in the demo’s budget. Historical evidence always shows recorded expenses. Use **Reset simulated spending** to clear projections for that persona.
 
 ## How it works
 

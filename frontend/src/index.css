@@ -1058,3 +1058,54 @@ footer button:disabled {
   opacity: 0.55;
   cursor: default;
 }
+
+.transaction-filters,
+.payday-card .verdict,
+.payday-details,
+.transaction-row .reset-btn {
+  margin-top: 12px;
+}
+
+.transaction-heading,
+.transaction-pages {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.transaction-row > small,
+.payday-card label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.transaction-row p,
+.payday-card .verdict + p {
+  margin-top: 8px;
+}
+
+.review-label {
+  display: inline-block;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #15563d;
+  background: #e1f3e9;
+}
+
+.review-label.attention {
+  color: #754500;
+  background: #ffedce;
+}
+
+.payday-card label input {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.message-actions .reset-btn {
+  background: var(--card);
+  color: var(--sbank-green-dark);
+  text-align: left;
+}

@@ -21,12 +21,14 @@ export interface ChartSpec {
   secondary?: { label: string; value: number; max: number }
 }
 
-export type CoachPrompt = 'weekly_budget' | 'spending_profile' | 'dining_savings'
+export type CoachPrompt = 'weekly_budget' | 'spending_profile' | 'dining_savings' | 'monthly_spending' | 'transaction_spending'
 
 export interface ChatResponse {
   answer: string
   trace: ToolTrace[]
   chart?: ChartSpec
+  evidence?: SpendingEvidence[]
+  experiment?: ExperimentDraft
 }
 
 const API = '/api'
@@ -35,11 +37,12 @@ export async function sendChat(
   messages: ChatMsg[],
   customerId: string,
   prompt?: CoachPrompt,
+  scope?: Pick<SpendingScope, 'category' | 'basket' | 'start' | 'end'> & { month_offset?: number },
 ): Promise<ChatResponse> {
   const res = await fetch(`${API}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, customer_id: customerId, prompt }),
+    body: JSON.stringify({ messages, customer_id: customerId, prompt, ...scope }),
   })
   if (!res.ok) throw new Error(`chat failed: ${res.status}`)
   return res.json()
@@ -297,5 +300,78 @@ export async function simulateTx(
 export async function clearSimulated(customerId: string): Promise<{ cleared: number }> {
   const res = await fetch(`${API}/simulate?customer_id=${customerId}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('clear failed')
+  return res.json()
+}
+
+export interface SpendingScope {
+  start?: string
+  end?: string
+  category?: string | null
+  basket?: string | null
+  attention?: boolean
+}
+
+export interface SpendingEvidence extends SpendingScope {
+  label: string
+  count?: number
+}
+
+export interface ExperimentDraft {
+  category: string
+  pct: number
+  days: number
+}
+
+export interface TransactionPage {
+  start: string
+  end: string
+  count: number
+  total_eur: number
+  rows: {
+    date: string
+    category: string
+    merchant: string | null
+    amount_eur: number
+    basket: string
+    transaction_type: string
+  }[]
+}
+
+export async function fetchTransactions(customerId: string, scope: SpendingScope, offset: number, signal: AbortSignal): Promise<TransactionPage> {
+  const query = new URLSearchParams({ customer_id: customerId, offset: String(offset) })
+  for (const [key, value] of Object.entries(scope)) {
+    if (value) query.set(key, String(value))
+  }
+  const res = await fetch(`${API}/transactions?${query}`, { signal })
+  if (!res.ok) throw new Error('transactions failed')
+  return res.json()
+}
+
+export interface PaydayCheck {
+  as_of: string
+  estimated_payday: string | null
+  balance_eur: number
+  bills: { name: string; predicted_date: string; amount_eur: number }[]
+  bill_total_eur: number
+  buffer_eur: number
+  purchase_eur: number
+  projected_before_eur: number
+  projected_after_eur: number
+  room_eur: number
+}
+
+export async function fetchPayday(customerId: string, purchase: number, buffer: number, signal: AbortSignal): Promise<PaydayCheck> {
+  const query = new URLSearchParams({ customer_id: customerId, purchase_eur: String(purchase), buffer_eur: String(buffer) })
+  const res = await fetch(`${API}/payday?${query}`, { signal })
+  if (!res.ok) throw new Error('payday forecast failed')
+  return res.json()
+}
+
+export async function fetchChallengeQuote(customerId: string, draft: ExperimentDraft, signal: AbortSignal): Promise<{ budget_eur: number }> {
+  const query = new URLSearchParams({
+    customer_id: customerId, category: draft.category, pct: String(draft.pct), days: String(draft.days),
+  })
+  const res = await fetch(`${API}/challenges/quote?${query}`, { signal })
+  if (!res.ok) throw new Error('challenge quote failed')
   return res.json()
 }

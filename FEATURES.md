@@ -10,9 +10,11 @@ AI money coach over synthetic S-Bank transaction data. Mobile web app (Vite/Reac
 |---|---|---|
 | Persona | Pick a demo customer (Emma 20 / Mikko 29 / Riitta 63). Whole app switches to their data. Persisted in localStorage. | `GET /personas` |
 | Coach | Opens after persona selection with a heads-up and three data-backed starter questions. Free-form chat uses the configured AI provider. | `POST /chat` |
-| Month | Balance/income/spent/safe-to-spend cards; "What do you want to track?" — category donut, basket donut, balance line, peer benchmark bars; coaching plan card (3 actions with € impact). | `GET /monthly`, `/benchmark`, `/coaching_plan` |
+| Month | Balance/income/spent/safe-to-spend cards; "What do you want to track?" — category donut, basket donut, balance line, peer benchmark bars; coaching plan card, recorded transactions with basket labels and links to Aino, and a payday affordability check. | `GET /monthly`, `/benchmark`, `/coaching_plan` |
 | Goals | Savings goal (weekly target, months, progress from real savings deposits) + Money experiment (spend-cap challenge with fast-forward). | `GET/POST /goal`, `/challenges` |
 | Simulate | Random spend from the user's own history → Jev or demo rules classify → persisted as simulated → budget burns down. Alternatives: wait for salary / trim / make a goal. | `GET /random_tx`, `POST/DELETE /simulate` |
+
+Coach answers link to their date- and category-filtered transaction evidence. What-if savings answers can prefill a spend-cap experiment, with the euro budget previewed before confirmation.
 
 ## Core concepts
 

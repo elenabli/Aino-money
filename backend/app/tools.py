@@ -108,51 +108,82 @@ def resolve_category(raw: str | None) -> tuple[str | None, str | None]:
     return None, None
 
 
-def spend_by_category(customer_id: str, months: int = 3, category: str | None = None):
-    start = months_ago(months)
-    cat, mcc = resolve_category(category)
-    con = connect()
-    if cat:
-        q = """
-            SELECT category, strftime(tx_date, '%Y-%m') AS month, round(sum(-tx_amount_eur), 2) AS spent
-            FROM tx_enriched
-            WHERE customer_id = ? AND flow = 'expense' AND category = ? AND tx_date >= ?
-        """
-        args: list = [customer_id, cat, start]
+def spending_filters(customer_id, start, end, category=None, basket=None, attention=None):
+    conditions = ["customer_id = ?", "flow = 'expense'", "simulated = 0", "tx_date BETWEEN ? AND ?"]
+    args = [customer_id, start, end]
+    if category:
+        cat, mcc = resolve_category(category)
+        conditions.append("category = ?")
+        args.append(cat or category)
         if mcc:
-            q += " AND mcc_code = ?"
-            args.append(mcc)
-        q += " GROUP BY category, month ORDER BY month"
-        rows = con.execute(q, args).fetchall()
-    else:
-        rows = con.execute("""
-            SELECT category, strftime(tx_date, '%Y-%m') AS month, round(sum(-tx_amount_eur), 2) AS spent
-            FROM tx_enriched
-            WHERE customer_id = ? AND flow = 'expense' AND tx_date >= ?
-            GROUP BY category, month ORDER BY month
-        """, [customer_id, start]).fetchall()
-    con.close()
-    return {"months": months, "rows": [dict(zip(("category", "month", "spent_eur"), r)) for r in rows]}
+            conditions.append("mcc_code IN (?, ?)")
+            args.extend(TAXI_MCCS)
+    if basket:
+        conditions.append("basket = ?")
+        args.append(basket)
+    if attention:
+        conditions.append("basket IN ('mandatory_irregular', 'everyday_discretionary')")
+    return " AND ".join(conditions), args
+
+
+def transaction_list(customer_id, start=None, end=None, category=None, basket=None, attention=False, offset=0):
+    start, end = start or months_ago(3), end or ref_date().isoformat()
+    where, args = spending_filters(customer_id, start, end, category, basket, attention)
+    with connect() as con:
+        count, total = con.execute(
+            f"SELECT count(*), coalesce(round(sum(-tx_amount_eur), 2), 0) FROM tx_enriched WHERE {where}", args
+        ).fetchone()
+        rows = con.execute(f"""
+            SELECT cast(tx_date AS VARCHAR), category, merchant_id, -tx_amount_eur, basket, transaction_type
+            FROM tx_enriched WHERE {where}
+            ORDER BY tx_date DESC, tx_timestamp DESC, category, merchant_id, tx_amount_eur, basket, transaction_type
+            LIMIT 25 OFFSET ?
+        """, [*args, offset]).fetchall()
+    return {
+        "start": start, "end": end, "category": category, "basket": basket,
+        "count": count, "total_eur": float(total),
+        "rows": [dict(zip(("date", "category", "merchant", "amount_eur", "basket", "transaction_type"), row)) for row in rows],
+    }
+
+
+def spend_by_category(customer_id: str, months: int = 3, category: str | None = None,
+                      start: str | None = None, end: str | None = None):
+    start, end = start or months_ago(months), end or ref_date().isoformat()
+    # Parse explicit dates before running the query so malformed model arguments fail predictably.
+    start, end = datetime.date.fromisoformat(start).isoformat(), datetime.date.fromisoformat(end).isoformat()
+    where, args = spending_filters(customer_id, start, end, category)
+    with connect() as con:
+        rows = con.execute(f"""
+            SELECT category, strftime(tx_date, '%Y-%m'), round(sum(-tx_amount_eur), 2), count(*)
+            FROM tx_enriched WHERE {where}
+            GROUP BY 1, 2 ORDER BY 2, 1
+        """, args).fetchall()
+    return {
+        "months": months, "start": start, "end": end, "category": category,
+        "count": sum(row[3] for row in rows),
+        "rows": [dict(zip(("category", "month", "spent_eur"), row[:3])) for row in rows],
+    }
 
 
 def basket_breakdown(customer_id: str, months: int = 3):
     start = months_ago(months)
+    end = ref_date().isoformat()
     con = connect()
     totals = con.execute("""
         SELECT basket, round(sum(-tx_amount_eur), 2) AS total
         FROM tx_enriched
-        WHERE customer_id = ? AND flow = 'expense' AND tx_date >= ?
+        WHERE customer_id = ? AND flow = 'expense' AND simulated = 0 AND tx_date BETWEEN ? AND ?
         GROUP BY basket ORDER BY total DESC
-    """, [customer_id, start]).fetchall()
+    """, [customer_id, start, end]).fetchall()
     top = con.execute("""
         SELECT basket, merchant_id, count(*) AS n, round(sum(-tx_amount_eur), 2) AS total
         FROM tx_enriched
-        WHERE customer_id = ? AND flow = 'expense' AND tx_date >= ? AND merchant_id != ''
+        WHERE customer_id = ? AND flow = 'expense' AND simulated = 0 AND tx_date BETWEEN ? AND ? AND merchant_id != ''
         GROUP BY basket, merchant_id ORDER BY basket, total DESC
-    """, [customer_id, start]).fetchall()
+    """, [customer_id, start, end]).fetchall()
     con.close()
     return {
-        "months": months,
+        "months": months, "start": start, "end": end,
         "totals": [dict(zip(("basket", "total_eur"), r)) for r in totals],
         "top_merchants": [dict(zip(("basket", "merchant_id", "tx_count", "total_eur"), r)) for r in top],
     }
@@ -262,19 +293,12 @@ def safe_to_spend(customer_id: str):
 
 
 def what_if(customer_id: str, category: str, change_pct: float):
-    start = months_ago(3)
-    cat, mcc = resolve_category(category)
-    con = connect()
-    q = """
-        SELECT round(sum(-tx_amount_eur), 2) FROM tx_enriched
-        WHERE customer_id = ? AND flow = 'expense' AND category = ? AND tx_date >= ?
-    """
-    args: list = [customer_id, cat or category, start]
-    if mcc:
-        q += " AND mcc_code = ?"
-        args.append(mcc)
-    total = con.execute(q, args).fetchone()[0] or 0
-    con.close()
+    cat, _ = resolve_category(category)
+    where, args = spending_filters(customer_id, months_ago(3), ref_date(), category)
+    with connect() as con:
+        total = con.execute(
+            f"SELECT coalesce(round(sum(-tx_amount_eur), 2), 0) FROM tx_enriched WHERE {where}", args
+        ).fetchone()[0]
     monthly = total / 3
     saved_monthly = -monthly * (change_pct / 100)
     return {
@@ -292,27 +316,23 @@ def spender_profile(customer_id: str):
     con = connect()
     baskets = con.execute("""
         SELECT basket, round(sum(-tx_amount_eur), 2) FROM tx_enriched
-        WHERE customer_id = ? AND flow = 'expense' AND tx_date >= ?
+        WHERE customer_id = ? AND flow = 'expense' AND simulated = 0 AND tx_date BETWEEN ? AND ?
         GROUP BY basket
-    """, [customer_id, start]).fetchall()
-    small = con.execute("""
+    """, [customer_id, start, ref_date()]).fetchall()
+    small_or_weekend = con.execute("""
         SELECT count(*) FROM tx_enriched
         WHERE customer_id = ? AND flow = 'expense' AND basket = 'everyday_discretionary'
-          AND tx_amount_eur > -10 AND tx_date >= ?
-    """, [customer_id, start]).fetchone()[0]
-    weekend = con.execute("""
-        SELECT count(*) FROM tx_enriched
-        WHERE customer_id = ? AND flow = 'expense' AND basket = 'everyday_discretionary'
-          AND dayofweek(tx_date) IN (0, 6) AND tx_date >= ?
-    """, [customer_id, start]).fetchone()[0]
+          AND (tx_amount_eur > -10 OR dayofweek(tx_date) IN (0, 6))
+          AND simulated = 0 AND tx_date BETWEEN ? AND ?
+    """, [customer_id, start, ref_date()]).fetchone()[0]
     everyday_count = con.execute("""
         SELECT count(*) FROM tx_enriched
-        WHERE customer_id = ? AND flow = 'expense' AND basket = 'everyday_discretionary' AND tx_date >= ?
-    """, [customer_id, start]).fetchone()[0]
+        WHERE customer_id = ? AND flow = 'expense' AND basket = 'everyday_discretionary' AND simulated = 0 AND tx_date BETWEEN ? AND ?
+    """, [customer_id, start, ref_date()]).fetchone()[0]
     con.close()
     total = sum(r[1] for r in baskets) or 1
     shares = {r[0]: round(r[1] / total * 100, 1) for r in baskets}
-    impulse = round((small + weekend) / everyday_count * 100, 1) if everyday_count else 0
+    impulse = round(small_or_weekend / everyday_count * 100, 1) if everyday_count else 0
     return {
         "months": 3,
         "basket_shares_pct": shares,
@@ -428,6 +448,25 @@ def upcoming_events(customer_id: str) -> dict:
         "upcoming_bills": events,
         "balance_now_eur": balance,
         "low_balance_risk": low,
+    }
+
+
+def payday_check(customer_id: str, purchase_eur: float = 0, buffer_eur: float = 100) -> dict:
+    forecast = upcoming_events(customer_id)
+    salary = forecast["next_salary"]
+    balance = forecast["balance_now_eur"]
+    if not salary:
+        return {"estimated_payday": None, "as_of": forecast["today"]}
+    # Reserve same-day bills too because their order relative to income is unknown.
+    bills = [bill for bill in forecast["upcoming_bills"] if bill["days_until"] <= salary["days_until"]]
+    bill_total = round(sum(bill["amount_eur"] for bill in bills), 2)
+    projected = round(balance - bill_total, 2)
+    return {
+        "as_of": forecast["today"], "estimated_payday": salary["predicted_date"],
+        "balance_eur": balance, "bills": bills, "bill_total_eur": bill_total, "buffer_eur": buffer_eur,
+        "purchase_eur": purchase_eur, "projected_before_eur": projected,
+        "projected_after_eur": round(projected - purchase_eur, 2),
+        "room_eur": max(0, round(projected - buffer_eur, 2)),
     }
 
 
@@ -952,41 +991,45 @@ def get_goal(customer_id: str) -> dict | None:
     }
 
 
+def challenge_quote(customer_id: str, category: str, pct: float, days: int) -> dict:
+    cat, _ = resolve_category(category)
+    category = cat or category
+    start = months_ago(3)
+    where, args = spending_filters(customer_id, start, ref_date(), category)
+    with connect() as con:
+        total = con.execute(
+            f"SELECT coalesce(sum(-tx_amount_eur), 0) FROM tx_enriched WHERE {where}", args
+        ).fetchone()[0]
+    baseline_daily = round(float(total) / 90, 2)
+    target_daily = round(baseline_daily * (1 - pct / 100), 2)
+    return {
+        "kind": "spend_cap", "category": category, "pct": pct, "days": days,
+        "baseline_daily_eur": baseline_daily, "target_daily_eur": target_daily,
+        "budget_eur": round(target_daily * days, 2),
+    }
+
+
 def create_challenge(customer_id: str, category: str, pct: float, days: int = 14) -> dict:
     from .db import ensure_app_tables
 
-    cat, mcc = resolve_category(category)
-    cat = cat or category
-    start = months_ago(3)
-    con = connect()
-    ensure_app_tables(con)
-    total = con.execute("""
-        SELECT coalesce(sum(-tx_amount_eur), 0) FROM tx_enriched
-        WHERE customer_id = ? AND flow = 'expense' AND category = ? AND tx_date >= ?
-    """, [customer_id, cat, start]).fetchone()[0] or 0
-    baseline_daily = round(total / 90, 2)
-    target_daily = round(baseline_daily * (1 - pct / 100), 2)
+    quote = challenge_quote(customer_id, category, pct, days)
     start_date = ref_date() + datetime.timedelta(days=1)
     end_date = start_date + datetime.timedelta(days=days - 1)
-    con.execute("UPDATE challenges SET status = 'completed' WHERE customer_id = ? AND status = 'active'", [customer_id])
-    cid = con.execute("SELECT nextval('challenge_seq')").fetchone()[0]
-    con.execute("""
-        INSERT INTO challenges VALUES (?, ?, 'spend_cap', ?, ?, ?, ?, ?, ?, 'active', ?)
-    """, [cid, customer_id, cat, float(pct), baseline_daily, target_daily, start_date, end_date, ref_date()])
-    con.close()
-    return {
-        "id": cid,
-        "kind": "spend_cap",
-        "category": cat,
-        "pct": pct,
-        "days": days,
-        "baseline_daily_eur": baseline_daily,
-        "target_daily_eur": target_daily,
-        "budget_eur": round(target_daily * days, 2),
-        "start_date": start_date.isoformat(),
-        "end_date": end_date.isoformat(),
-        "status": "active",
-    }
+    with connect() as con:
+        ensure_app_tables(con)
+        con.execute("BEGIN TRANSACTION")
+        con.execute("""
+            DELETE FROM tx_enriched
+            WHERE customer_id = ? AND simulated = 1 AND tx_date >= ?
+        """, [customer_id, start_date])
+        con.execute("UPDATE challenges SET status = 'completed' WHERE customer_id = ? AND status = 'active'", [customer_id])
+        cid = con.execute("SELECT nextval('challenge_seq')").fetchone()[0]
+        con.execute("""
+            INSERT INTO challenges VALUES (?, ?, 'spend_cap', ?, ?, ?, ?, ?, ?, 'active', ?)
+        """, [cid, customer_id, quote["category"], float(pct), quote["baseline_daily_eur"],
+              quote["target_daily_eur"], start_date, end_date, ref_date()])
+        con.commit()
+    return {**quote, "id": cid, "start_date": start_date.isoformat(), "end_date": end_date.isoformat(), "status": "active"}
 
 
 def _fast_forward_sample(customer_id: str, first_day: datetime.date, days: int, category: str, target_daily: float):

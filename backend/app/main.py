@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from openai import APIError
@@ -51,6 +53,11 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage]
     prompt: chat.CoachPrompt | None = None
+    category: str | None = Field(default=None, max_length=100)
+    month_offset: int = Field(default=1, ge=1, le=24)
+    start: date | None = None
+    end: date | None = None
+    basket: str | None = Field(default=None, max_length=40)
     customer_id: str | None = None
 
 
@@ -86,13 +93,32 @@ def chat_endpoint(req: ChatRequest):
     cid = req.customer_id or config.DEMO_CUSTOMER_ID
     msgs = [m.model_dump() for m in req.messages]
     if req.prompt is not None:
-        return chat.starter_answer(req.prompt, cid)
+        return chat.starter_answer(
+            req.prompt, cid, req.category, req.month_offset,
+            req.start.isoformat() if req.start else None, req.end.isoformat() if req.end else None, req.basket,
+        )
     if not config.OPENAI_API_KEY:
         raise HTTPException(status_code=503, detail="Free-form chat requires an AI provider.")
     try:
         return chat.chat(msgs, cid)
     except APIError as exc:
         raise HTTPException(status_code=503, detail="The chat provider is unavailable.") from exc
+
+
+@app.get("/transactions")
+def transactions(customer_id: str | None = None, start: date | None = None, end: date | None = None,
+                 category: str | None = None, basket: str | None = None, attention: bool = False,
+                 offset: int = Query(default=0, ge=0)):
+    return tools.transaction_list(
+        _cid(customer_id), start.isoformat() if start else None, end.isoformat() if end else None,
+        category, basket, attention, offset,
+    )
+
+
+@app.get("/payday")
+def payday(customer_id: str | None = None, purchase_eur: float = Query(default=0, ge=0, le=1e7),
+           buffer_eur: float = Query(default=100, ge=0, le=1e7)):
+    return tools.payday_check(_cid(customer_id), purchase_eur, buffer_eur)
 
 
 @app.get("/overview")
@@ -174,10 +200,16 @@ def get_goal(customer_id: str | None = Query(default=None)):
 
 
 class ChallengeRequest(BaseModel):
-    category: str
-    pct: float
-    days: int = 14
+    category: str = Field(min_length=1, max_length=100)
+    pct: float = Field(gt=0, lt=100)
+    days: int = Field(default=14, ge=1, le=30)
     customer_id: str | None = None
+
+
+@app.get("/challenges/quote")
+def challenge_quote(category: str, pct: float = Query(gt=0, lt=100), days: int = Query(default=14, ge=1, le=30),
+                    customer_id: str | None = None):
+    return tools.challenge_quote(_cid(customer_id), category, pct, days)
 
 
 @app.post("/challenges")
