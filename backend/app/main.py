@@ -55,6 +55,7 @@ class ChatRequest(BaseModel):
     prompt: chat.CoachPrompt | None = None
     category: str | None = Field(default=None, max_length=100)
     month_offset: int = Field(default=1, ge=1, le=24)
+    compare: bool = False
     start: date | None = None
     end: date | None = None
     basket: str | None = Field(default=None, max_length=40)
@@ -95,7 +96,7 @@ def chat_endpoint(req: ChatRequest):
     if req.prompt is not None:
         return chat.starter_answer(
             req.prompt, cid, req.category, req.month_offset,
-            req.start.isoformat() if req.start else None, req.end.isoformat() if req.end else None, req.basket,
+            req.start.isoformat() if req.start else None, req.end.isoformat() if req.end else None, req.basket, req.compare,
         )
     if not config.OPENAI_API_KEY:
         raise HTTPException(status_code=503, detail="Free-form chat requires an AI provider.")

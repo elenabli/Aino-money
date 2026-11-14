@@ -421,8 +421,9 @@ def _answer_metadata(trace: list[dict]) -> dict:
 
 def starter_answer(prompt: CoachPrompt, customer_id: str, category: str | None = None,
                    month_offset: int = 1, start: str | None = None, end: str | None = None,
-                   basket: str | None = None) -> dict:
+                   basket: str | None = None, compare: bool = False) -> dict:
     args = {}
+    comparison = None
     if prompt == "weekly_budget":
         tool_name = "safe_to_spend"
         result = tools.safe_to_spend(customer_id)
@@ -455,6 +456,20 @@ def starter_answer(prompt: CoachPrompt, customer_id: str, category: str | None =
         )
         # Row-level evidence is fetched from the transactions endpoint when opened.
         result.pop("rows")
+        if prompt == "monthly_spending" and compare and month_offset >= 2:
+            comparison_args = {
+                **args,
+                "start": tools.months_ago(month_offset),
+                "end": (datetime.date.fromisoformat(tools.months_ago(month_offset - 1)) - datetime.timedelta(days=1)).isoformat(),
+            }
+            comparison = tools.transaction_list(customer_id, **comparison_args)
+            comparison.pop("rows")
+            change = round(result["total_eur"] - comparison["total_eur"], 2)
+            direction = "more" if change > 0 else "less"
+            if change:
+                answer += f" That’s €{abs(change):.2f} {direction} than the following month (€{comparison['total_eur']:.2f})."
+            else:
+                answer += " That’s the same amount as the following month."
     else:
         tool_name = "what_if"
         args = {"category": category or "Restaurants", "change_pct": -20}
@@ -465,6 +480,8 @@ def starter_answer(prompt: CoachPrompt, customer_id: str, category: str | None =
         )
 
     trace = [{"tool": tool_name, "args": args, "result": result}]
+    if comparison is not None:
+        trace.append({"tool": tool_name, "args": comparison_args, "result": comparison})
     return {"answer": answer, "trace": trace, "chart": _make_chart(tool_name, result), **_answer_metadata(trace)}
 
 

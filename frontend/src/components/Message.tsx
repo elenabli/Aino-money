@@ -41,7 +41,7 @@ export function Message({ msg, onOpenTransactions, onOpenGoals }: {
           <div className="message-actions">
             {onOpenTransactions && msg.evidence?.map(({ label, count, ...scope }, index) => (
               <button className="reset-btn" key={index} onClick={() => onOpenTransactions(scope)}>
-                {count === undefined ? label + ' transactions' : `Show transactions (${count}) · ${label}`}
+                {count === undefined ? label + ' transactions' : `Show transactions (${count}) · ${label}${scope.start ? ` · ${scope.start.slice(0, 7)}` : ''}`}
               </button>
             ))}
             {msg.experiment && onOpenGoals && (
@@ -58,7 +58,7 @@ export function Message({ msg, onOpenTransactions, onOpenGoals }: {
           <div className="message-actions">
             {onOpenTransactions && msg.evidence?.map(({ label, count, ...scope }, index) => (
               <button className="reset-btn" key={index} onClick={() => onOpenTransactions(scope)}>
-                {count === undefined ? label + ' transactions' : `Show transactions (${count}) · ${label}`}
+                {count === undefined ? label + ' transactions' : `Show transactions (${count}) · ${label}${scope.start ? ` · ${scope.start.slice(0, 7)}` : ''}`}
               </button>
             ))}
             {msg.experiment && onOpenGoals && (

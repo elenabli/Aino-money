@@ -37,7 +37,7 @@ export async function sendChat(
   messages: ChatMsg[],
   customerId: string,
   prompt?: CoachPrompt,
-  scope?: Pick<SpendingScope, 'category' | 'basket' | 'start' | 'end'> & { month_offset?: number },
+  scope?: Pick<SpendingScope, 'category' | 'basket' | 'start' | 'end'> & { month_offset?: number; compare?: boolean },
 ): Promise<ChatResponse> {
   const res = await fetch(`${API}/chat`, {
     method: 'POST',

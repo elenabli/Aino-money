@@ -11,7 +11,7 @@ const STARTERS = [
 export type CoachTurn = {
   question: string
   prompt?: CoachPrompt
-  scope?: SpendingScope & { month_offset?: number }
+  scope?: SpendingScope & { month_offset?: number; compare?: boolean }
 }
 
 export function ChatView({
@@ -128,8 +128,8 @@ export function ChatView({
             {lastPrompt === 'monthly_spending' && offset < 24 && (
               <button onClick={() => ask({
                 question: 'What about the previous calendar month?', prompt: 'monthly_spending',
-                scope: { ...lastTurn?.scope, month_offset: offset + 1 },
-              })}>See the previous month</button>
+                scope: { ...lastTurn?.scope, month_offset: offset + 1, compare: true },
+              })}>Compare with the previous month</button>
             )}
             {lastPrompt === 'monthly_spending' && lastTurn?.scope?.category === 'Restaurants' && (
               <button onClick={() => ask({
