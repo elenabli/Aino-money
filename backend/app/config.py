@@ -16,6 +16,25 @@ try:
 except json.JSONDecodeError:
     OPENAI_EXTRA_HEADERS = {}
 
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL") or "claude-sonnet-4-6"
+ANTHROPIC_WORKSPACE_ID = os.getenv("ANTHROPIC_WORKSPACE_ID", "").strip()
+
+CHAT_PROVIDER = os.getenv("CHAT_PROVIDER") or ("anthropic" if ANTHROPIC_API_KEY else "openai")
+if CHAT_PROVIDER not in {"anthropic", "openai"}:
+    raise ValueError("CHAT_PROVIDER must be anthropic or openai")
+
+if CHAT_PROVIDER == "anthropic":
+    CHAT_API_KEY = ANTHROPIC_API_KEY
+    CHAT_MODEL = ANTHROPIC_MODEL
+    CHAT_BASE_URL = "https://api.anthropic.com/v1/"
+    CHAT_HEADERS = {"anthropic-workspace-id": ANTHROPIC_WORKSPACE_ID} if ANTHROPIC_WORKSPACE_ID else {}
+else:
+    CHAT_API_KEY = OPENAI_API_KEY
+    CHAT_MODEL = OPENAI_MODEL
+    CHAT_BASE_URL = OPENAI_BASE_URL
+    CHAT_HEADERS = OPENAI_EXTRA_HEADERS
+
 TYPESAFE_API_KEY = os.getenv("TYPESAFE_API_KEY", "")
 TYPESAFE_MODEL = os.getenv("TYPESAFE_MODEL", "jev-latest")
 

@@ -31,8 +31,8 @@ def _log_chat(customer_id: str, messages: list[dict], result: dict) -> None:
 
 
 def _client_headers(customer_id: str, messages: list[dict]) -> dict:
-    headers = dict(config.OPENAI_EXTRA_HEADERS)
-    if "opencode.ai" in config.OPENAI_BASE_URL and "x-opencode-session" not in headers:
+    headers = dict(config.CHAT_HEADERS)
+    if "opencode.ai" in config.CHAT_BASE_URL and "x-opencode-session" not in headers:
         first_user = next((m["content"] for m in messages if m["role"] == "user"), "")
         digest = hashlib.sha256(f"{customer_id}:{first_user}".encode()).hexdigest()[:32]
         headers["x-opencode-session"] = f"ses_{digest}"
@@ -487,8 +487,8 @@ def starter_answer(prompt: CoachPrompt, customer_id: str, category: str | None =
 
 def chat(messages: list[dict], customer_id: str) -> dict:
     client = OpenAI(
-        api_key=config.OPENAI_API_KEY,
-        base_url=config.OPENAI_BASE_URL,
+        api_key=config.CHAT_API_KEY,
+        base_url=config.CHAT_BASE_URL,
         default_headers=_client_headers(customer_id, messages),
         timeout=20.0,
         max_retries=0,
@@ -500,7 +500,7 @@ def chat(messages: list[dict], customer_id: str) -> dict:
     chart: dict | None = None
     for _ in range(5):
         resp = client.chat.completions.create(
-            model=config.OPENAI_MODEL,
+            model=config.CHAT_MODEL,
             messages=msgs,
             tools=TOOL_SPECS,
             tool_choice="auto",

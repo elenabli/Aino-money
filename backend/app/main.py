@@ -64,7 +64,7 @@ class ChatRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "model": config.OPENAI_MODEL, "jev": config.TYPESAFE_MODEL}
+    return {"ok": True, "provider": config.CHAT_PROVIDER, "model": config.CHAT_MODEL, "jev": config.TYPESAFE_MODEL}
 
 
 @app.get("/personas")
@@ -98,7 +98,7 @@ def chat_endpoint(req: ChatRequest):
             req.prompt, cid, req.category, req.month_offset,
             req.start.isoformat() if req.start else None, req.end.isoformat() if req.end else None, req.basket, req.compare,
         )
-    if not config.OPENAI_API_KEY:
+    if not config.CHAT_API_KEY:
         raise HTTPException(status_code=503, detail="Free-form chat requires an AI provider.")
     try:
         return chat.chat(msgs, cid)
@@ -142,7 +142,7 @@ def monthly(customer_id: str | None = Query(default=None)):
 def welcome(customer_id: str | None = Query(default=None)):
     return {
         "message": tools.welcome_message(_cid(customer_id)),
-        "chat_available": bool(config.OPENAI_API_KEY),
+        "chat_available": bool(config.CHAT_API_KEY),
     }
 
 

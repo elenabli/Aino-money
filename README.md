@@ -7,10 +7,14 @@ See [FEATURES.md](FEATURES.md) for the feature map and how each piece is suppose
 
 ## Setup
 
-1. Optional provider keys: copy `backend/.env.example` to `backend/.env`. Set
-   `OPENAI_API_KEY` (and `OPENAI_BASE_URL` / `OPENAI_MODEL` if needed) for free-form chat,
-   and `TYPESAFE_API_KEY` for live Jev classification. The starter questions and
-   demo purchase simulation run with the local database.
+1. For free-form chat with Claude, use `backend/.env.example` as a reference for
+   `backend/.env`. Set `CHAT_PROVIDER=anthropic` and add your Claude Console key
+   as `ANTHROPIC_API_KEY`. The default model is `claude-sonnet-4-6`. Set
+   `ANTHROPIC_MODEL` to override it, or `ANTHROPIC_WORKSPACE_ID` if your key
+   requires an explicit workspace. Spanki uses Anthropic’s compatibility endpoint
+   to reuse its transaction tool calls. Restart the backend after changing settings.
+   Set `TYPESAFE_API_KEY` for live Jev classification. Starter questions and the
+   purchase simulation also run with the local database and no provider keys.
 2. Install backend deps (uv): `uv venv backend/.venv && uv pip install -p backend/.venv -r backend/requirements.txt`
 3. Install frontend deps: `cd frontend && npm install`
 
