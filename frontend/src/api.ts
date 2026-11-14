@@ -21,7 +21,19 @@ export interface ChartSpec {
   secondary?: { label: string; value: number; max: number }
 }
 
-export type CoachPrompt = 'weekly_budget' | 'spending_profile' | 'dining_savings' | 'monthly_spending' | 'transaction_spending'
+export type CoachPrompt = 'weekly_budget' | 'spending_profile' | 'dining_savings' | 'monthly_spending' | 'transaction_spending' | 'grocery_plan' | 'apartment_plan' | 'transaction_detail' | 'receipt_breakdown' | 'category_context'
+
+export interface ChatTopic {
+  label: string
+  question: string
+  prompt?: CoachPrompt
+}
+
+export interface ChatScope extends SpendingScope {
+  month_offset?: number
+  compare?: boolean
+  transaction_id?: number
+}
 
 export interface ChatResponse {
   answer: string
@@ -29,6 +41,7 @@ export interface ChatResponse {
   chart?: ChartSpec
   evidence?: SpendingEvidence[]
   experiment?: ExperimentDraft
+  topics?: ChatTopic[]
 }
 
 const API = '/api'
@@ -37,7 +50,7 @@ export async function sendChat(
   messages: ChatMsg[],
   customerId: string,
   prompt?: CoachPrompt,
-  scope?: Pick<SpendingScope, 'category' | 'basket' | 'start' | 'end'> & { month_offset?: number; compare?: boolean },
+  scope?: ChatScope,
 ): Promise<ChatResponse> {
   const res = await fetch(`${API}/chat`, {
     method: 'POST',
@@ -76,7 +89,20 @@ export async function fetchOverview(customerId: string) {
   return res.json()
 }
 
+export interface GroceryInsights {
+  start: string
+  end: string
+  visits: number
+  trips_per_week: number
+  total_eur: number
+  small_trips: number
+  small_trip_total_eur: number
+  categories: { name: string; spent_eur: number; visits: number; on_small_trips_eur: number }[]
+  experiment: { category: string; baseline_eur: number; target_eur: number; savings_eur: number } | null
+}
+
 export interface MonthlyOverview {
+  groceries?: GroceryInsights | null
   month: string
   income: number
   expense: number
@@ -111,7 +137,27 @@ export async function fetchRandomTx(customerId: string): Promise<RandomTx> {
   return res.json()
 }
 
-export async function fetchWelcome(customerId: string): Promise<{ message: string; chat_available: boolean }> {
+export interface AdviserCheckIn {
+  title: string
+  start: string
+  end: string
+  spend_eur: number
+  previous_eur: number
+  top_category: { category: string; amount_eur: number; count: number } | null
+  days: number
+  estimated_payday: string | null
+  bills_eur: number | null
+  scenarios: { reduction_pct: number; spend_eur: number; balance_eur?: number }[]
+  goal: { name: string; target_eur: number; saved_so_far_eur: number; weekly_eur: number | null } | null
+}
+
+export async function fetchWelcome(customerId: string): Promise<{
+  message: string
+  chat_available: boolean
+  has_grocery_receipts: boolean
+  check_in: AdviserCheckIn
+  goal_plan?: { goal: string; target_eur: number; saved_eur: number; net_eur: number } | null
+}> {
   const res = await fetch(`${API}/welcome?customer_id=${customerId}`)
   if (!res.ok) throw new Error('welcome failed')
   return res.json()
@@ -328,13 +374,30 @@ export interface TransactionPage {
   count: number
   total_eur: number
   rows: {
+    id: number
     date: string
     category: string
     merchant: string | null
     amount_eur: number
     basket: string
     transaction_type: string
+    receipt_id?: string
   }[]
+}
+
+export interface Receipt {
+  total_eur: number
+  food_eur: number
+  non_food_eur: number
+  categories: { name: string; amount_eur: number }[]
+  items: { name: string; amount_eur: number; category: string; group: 'Food' | 'Non-food' }[]
+}
+
+export async function fetchReceipt(customerId: string, receiptId: string, signal: AbortSignal): Promise<Receipt> {
+  const query = new URLSearchParams({ customer_id: customerId })
+  const res = await fetch(`${API}/receipts/${encodeURIComponent(receiptId)}?${query}`, { signal })
+  if (!res.ok) throw new Error(`receipt failed: ${res.status}`)
+  return res.json()
 }
 
 export async function fetchTransactions(customerId: string, scope: SpendingScope, offset: number, signal: AbortSignal): Promise<TransactionPage> {

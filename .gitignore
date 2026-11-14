@@ -12,3 +12,7 @@ __pycache__/
 /tx_customers_junction.csv
 /mtg_*.csv
 /receipts/
+
+/deploy/data/
+/.wrangler/
+/deploy/vps.env

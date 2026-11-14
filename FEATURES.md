@@ -1,4 +1,4 @@
-# Spanki — features & how they work
+# Aino Money — features & how they work
 
 AI money coach over synthetic S-Bank transaction data. Mobile web app (Vite/React)
 + FastAPI backend + DuckDB. Two AI services: an OpenAI-compatible chat LLM

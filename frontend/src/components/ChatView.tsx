@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
-import { fetchWelcome, sendChat, type ChatMsg, type ChatResponse, type CoachPrompt, type SpendingScope, type ExperimentDraft } from '../api'
+import { fetchWelcome, sendChat, type ChatMsg, type ChatResponse, type ChatTopic, type ChatScope, type SpendingScope, type ExperimentDraft } from '../api'
 import { Message } from './Message'
+import { CheckIn } from './CheckIn'
 
-const STARTERS = [
-  { id: 'weekly_budget', label: 'Check my weekly budget', question: 'How much is safe to spend this week?' },
-  { id: 'spending_profile', label: 'See where my money goes', question: 'How is my spending split?' },
-  { id: 'dining_savings', label: 'Find savings from eating out', question: 'How much could I save by eating out 20% less?' },
-] as const satisfies ReadonlyArray<{ id: CoachPrompt; label: string; question: string }>
+const WEEKLY_BUDGET = {
+  prompt: 'weekly_budget', label: 'Check my weekly budget', question: 'How much is safe to spend this week?',
+} satisfies ChatTopic
 
-export type CoachTurn = {
-  question: string
-  prompt?: CoachPrompt
-  scope?: SpendingScope & { month_offset?: number; compare?: boolean }
-}
+const SPENDING_PROFILE = {
+  prompt: 'spending_profile', label: 'See where my money goes', question: 'How is my spending split?',
+} satisfies ChatTopic
+
+const GROCERIES = {
+  label: 'Explore my grocery receipts', question: 'What patterns show up in my grocery receipts?', prompt: 'grocery_plan',
+} satisfies ChatTopic
+
+const DINING = {
+  label: 'See last month’s dining spending', question: 'How much did I spend eating out last month?',
+  prompt: 'monthly_spending', scope: { category: 'Restaurants' },
+} satisfies ChatTopic & { scope: ChatScope }
+
+export type CoachTurn = Pick<ChatTopic, 'question' | 'prompt'> & { scope?: ChatScope }
 
 export function ChatView({
   customerId,
@@ -39,6 +47,7 @@ export function ChatView({
   const [pending, setPending] = useState<CoachTurn | null>(null)
   const [failed, setFailed] = useState<CoachTurn | null>(null)
   const [input, setInput] = useState('')
+  const consumedTurn = useRef<CoachTurn | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -48,12 +57,13 @@ export function ChatView({
   }, [active, messages, pending, failed, linkedTurn])
 
   useEffect(() => {
-    let active = true
+    if (!active) return
+    let current = true
     fetchWelcome(customerId)
-      .then((welcome) => { if (active) setWelcome(welcome) })
+      .then((welcome) => { if (current) setWelcome(welcome) })
       .catch(() => {})
-    return () => { active = false }
-  }, [customerId])
+    return () => { current = false }
+  }, [active, customerId])
 
   async function ask({ question, prompt, scope }: CoachTurn) {
     if (!question.trim() || pending) return
@@ -63,11 +73,12 @@ export function ChatView({
     ]
     setPending({ question, prompt, scope })
     setFailed(null)
-    if (!prompt) setInput('')
+    if (!prompt && question === input) setInput('')
     try {
       const res = await sendChat(history, customerId, prompt, scope)
       setMessages([...messages, history[history.length - 1], {
-        role: 'assistant', content: res.answer, trace: res.trace, chart: res.chart, evidence: res.evidence, experiment: res.experiment,
+        role: 'assistant', content: res.answer, trace: res.trace, chart: res.chart, evidence: res.evidence,
+        experiment: res.experiment, topics: res.topics,
       }])
       setLastTurn({ question, prompt, scope })
     } catch {
@@ -77,52 +88,82 @@ export function ChatView({
     }
   }
 
+  useEffect(() => {
+    if (!active || !linkedTurn || pending || consumedTurn.current === linkedTurn) return
+    consumedTurn.current = linkedTurn
+    onConsumeTurn()
+    void ask(linkedTurn)
+  })
+
+  const goal = welcome?.goal_plan
   const displayedTurn = pending ?? failed
   const lastPrompt = lastTurn?.prompt
   const offset = lastTurn?.scope?.month_offset ?? 1
 
+  const responseTopics = messages.at(-1)?.topics
+  const starterTopics = (
+    <div className="chips" aria-label="Topics to explore">
+      {(customerId === 'CUST00001' || customerId === 'CUST02220'
+        ? [WEEKLY_BUDGET, SPENDING_PROFILE]
+        : [SPENDING_PROFILE, WEEKLY_BUDGET]
+      ).map((topic) => <button key={topic.prompt} onClick={() => ask(topic)}>{topic.label}</button>)}
+      {welcome?.has_grocery_receipts && <button onClick={() => ask(GROCERIES)}>{GROCERIES.label}</button>}
+      <button onClick={() => ask(DINING)}>{DINING.label}</button>
+      {goal && <button onClick={() => ask({
+        question: 'What’s my first step towards my apartment deposit?', prompt: 'apartment_plan',
+      })}>Plan my apartment deposit</button>}
+      {welcome?.chat_available && <button onClick={() => ask({
+        question: 'What stands out about my spending last month compared with the month before? Use my transactions and explain one change with the category and amounts.',
+      })}>Spot a change in my spending</button>}
+    </div>
+  )
+
   return (
     <>
       <main>
-        <div className="welcome">
-          <h1>Meet Aino, your money coach</h1>
-          <p>{welcome?.message ?? 'Explore your budget and spending using this persona’s demo transactions.'}</p>
-          <div className="chips" aria-label="Starter questions">
-            {STARTERS.map(({ id, label, question }) => (
-              <button key={id} disabled={!!pending} onClick={() => ask({ question, prompt: id })}>
-                {label}
-              </button>
-            ))}
-            <button disabled={!!pending} onClick={() => ask({
-              question: 'How much did I spend on taxis last month?', prompt: 'monthly_spending', scope: { category: 'taxis' },
-            })}>See last month’s taxi spending</button>
-            <button disabled={!!pending} onClick={() => ask({
-              question: 'How much did I spend eating out last month?', prompt: 'monthly_spending', scope: { category: 'Restaurants' },
-            })}>See last month’s dining spending</button>
-          </div>
-        </div>
+        {!messages.length && !displayedTurn && !linkedTurn && (
+          <section className="welcome chat-overview">
+            {welcome?.check_in ? (
+              <CheckIn data={welcome.check_in} onOpenTransactions={onOpenTransactions} onOpenPayday={onOpenPayday} />
+            ) : (
+              <>
+                <h1>Your spending check-in</h1>
+                <p>{welcome?.message ?? 'Aino can help you explore your spending and budget.'}</p>
+              </>
+            )}
+            {starterTopics}
+          </section>
+        )}
 
         {messages.map((msg, i) => (
           <Message key={i} msg={msg} onOpenTransactions={onOpenTransactions} onOpenGoals={onOpenGoals} />
         ))}
-        {linkedTurn && (
-          <div className="welcome">
-            <p>{linkedTurn.question}</p>
-            <button className="reset-btn" disabled={!!pending} onClick={() => {
-              onConsumeTurn()
-              ask(linkedTurn)
-            }}>Ask about these transactions</button>
-          </div>
+        {!displayedTurn && !!responseTopics?.length && (
+          <section className="welcome chat-overview" aria-label="Suggested topics">
+            <h2>Explore this spending</h2>
+            <div className="chips">
+              {responseTopics.map(({ label, ...topic }) => (
+                <button key={label} onClick={() => ask({ ...topic, scope: lastTurn?.scope })}>{label}</button>
+              ))}
+              {welcome?.chat_available && lastPrompt === 'transaction_detail' && (
+                <button onClick={() => ask({
+                  question: 'What stands out about this purchase compared with my recent spending in the same category?',
+                })}>Compare with my usual spending</button>
+              )}
+            </div>
+          </section>
         )}
-        {lastPrompt && !displayedTurn && (
+        {lastPrompt === 'apartment_plan' && !displayedTurn && (
+          <button className="coach-next" onClick={() => ask({
+            question: 'What could I change in my grocery spending?', prompt: 'grocery_plan',
+          })}>Find savings in my grocery receipts</button>
+        )}
+        {lastPrompt && lastPrompt !== 'apartment_plan' && !displayedTurn && (
           <div className="chips coach-actions">
             {lastPrompt === 'weekly_budget' && (
               <>
                 <button onClick={onOpenPayday}>Check what fits before payday</button>
                 <button onClick={onOpenSimulation}>Try a simulated purchase</button>
-                <button onClick={() => ask({
-                  question: STARTERS[0].question, prompt: STARTERS[0].id,
-                })}>Refresh my weekly budget</button>
               </>
             )}
             {lastPrompt === 'monthly_spending' && offset < 24 && (
@@ -137,9 +178,7 @@ export function ChatView({
               })}>What if I ate out 20% less?</button>
             )}
             {lastPrompt === 'spending_profile' && (
-              <button onClick={() => ask({
-                question: STARTERS[0].question, prompt: STARTERS[0].id,
-              })}>Check my weekly budget</button>
+              <button onClick={() => ask(WEEKLY_BUDGET)}>{WEEKLY_BUDGET.label}</button>
             )}
           </div>
         )}
@@ -149,9 +188,22 @@ export function ChatView({
           <div className="welcome">
             <p role="alert">{failed.prompt
               ? 'Aino couldn’t load this answer. Try again.'
-              : 'Free-form chat is temporarily unavailable. Try again or choose a starter question.'}</p>
+              : 'Free-form chat is temporarily unavailable. Try again or choose another topic.'}</p>
             <button className="reset-btn" onClick={() => ask(failed)}>Retry question</button>
+            <button className="reset-btn" onClick={() => setFailed(null)}>Choose another topic</button>
           </div>
+        )}
+        {!!messages.length && !displayedTurn && (
+          <details className="welcome chat-topics">
+            <summary>More ways to explore</summary>
+            {starterTopics}
+          </details>
+        )}
+        {!!messages.length && !displayedTurn && welcome?.check_in && (
+          <details className="welcome chat-overview chat-topics">
+            <summary>14-day spending check-in</summary>
+            <CheckIn data={welcome.check_in} onOpenTransactions={onOpenTransactions} onOpenPayday={onOpenPayday} />
+          </details>
         )}
         <div ref={bottomRef} />
       </main>

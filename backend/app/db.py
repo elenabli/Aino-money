@@ -1,6 +1,6 @@
 import duckdb
 
-from . import config
+from . import config, receipts
 
 
 def connect() -> duckdb.DuckDBPyConnection:
@@ -46,7 +46,13 @@ def ensure_app_tables(con: duckdb.DuckDBPyConnection | None = None) -> None:
 
 def ingest() -> None:
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-    con = connect()
+    with connect() as con:
+        con.begin()
+        _ingest(con)
+        con.commit()
+
+
+def _ingest(con: duckdb.DuckDBPyConnection) -> None:
     con.execute(f"""
         CREATE OR REPLACE TABLE tx AS
         SELECT
@@ -68,6 +74,8 @@ def ingest() -> None:
         SELECT customer_id, customer_postal_code, customer_age
         FROM read_csv_auto('{config.CUSTOMERS_PATH}', header=true)
     """)
+    receipts.ensure_tables(con)
+    receipts.restore_transactions(con)
     con.execute("""
         CREATE OR REPLACE TABLE merchants AS
         SELECT
@@ -80,9 +88,9 @@ def ingest() -> None:
             min(tx_amount_eur) AS min_amount,
             max(tx_amount_eur) AS max_amount
         FROM tx
-        WHERE merchant_id IS NOT NULL AND merchant_id != ''
+        WHERE customer_id != ? AND merchant_id IS NOT NULL AND merchant_id != ''
         GROUP BY merchant_id
-    """)
+    """, [receipts.CUSTOMER_ID])
     con.execute("""
         CREATE OR REPLACE TABLE merchant_classification (
             merchant_id VARCHAR PRIMARY KEY,
@@ -97,5 +105,4 @@ def ingest() -> None:
     n = con.execute("SELECT count(*) FROM tx").fetchone()[0]
     m = con.execute("SELECT count(*) FROM merchants").fetchone()[0]
     c = con.execute("SELECT count(*) FROM customers").fetchone()[0]
-    con.close()
     print(f"ingested: {n:,} tx rows, {m} merchants, {c} customers -> {config.DB_PATH}")

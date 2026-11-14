@@ -1,0 +1,26 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: ./vps.env
+        required: false
+    environment:
+      DEMO_CUSTOMER_ID: DEMO-SETUKORTTI
+    volumes:
+      - aino-money-data:/app/data
+  web:
+    image: nginx:stable-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "127.0.0.1:${AINO_MONEY_PORT:-8080}:80"
+    volumes:
+      - ../frontend/dist:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  aino-money-data:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate deterministic, itemized synthetic Prisma receipts for Spanki.
+"""Generate deterministic, itemized synthetic Prisma receipts for Aino Money.
 
 The source transactions provide customers, dates, merchants, and exact receipt
 Totals. Products, item selection, prices, and nutrition values are synthetic.
@@ -499,7 +499,7 @@ def write_manifest(
     for item in items:
         category_totals[item["category"]] += float(item["line_total_eur"])
     manifest = {
-        "dataset": "Spanki synthetic Prisma receipts",
+        "dataset": "Aino Money synthetic Prisma receipts",
         "version": 1,
         "synthetic": True,
         "generator": "scripts/generate_synthetic_receipts.py",

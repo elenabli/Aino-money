@@ -1,0 +1,8 @@
+**
+!backend/
+!backend/app/
+!backend/app/*.py
+!backend/requirements.txt
+!deploy/
+!deploy/data/
+!deploy/data/aino-money.duckdb

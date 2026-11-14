@@ -6,6 +6,7 @@ import {
   type Benchmark,
   type CoachingPlan,
   type MonthlyOverview,
+  type SpendingScope,
 } from '../api'
 import { ChartCard, type ChartSpec } from './ChartCard'
 
@@ -18,9 +19,10 @@ const BASKET_LABELS: Record<string, string> = {
 
 type Track = 'category' | 'basket' | 'balance' | 'benchmark'
 
-export function MonthView({ customerId, onOpenTransactions, onOpenPayday }: {
+export function MonthView({ customerId, onOpenTransactions, onOpenPayday, onAskGroceryPlan }: {
   customerId: string
-  onOpenTransactions: () => void
+  onOpenTransactions: (scope?: SpendingScope) => void
+  onAskGroceryPlan: () => void
   onOpenPayday: () => void
 }) {
   const [data, setData] = useState<MonthlyOverview | null>(null)
@@ -53,6 +55,7 @@ export function MonthView({ customerId, onOpenTransactions, onOpenPayday }: {
 
   if (!data) return <main className="loading">Loading…</main>
 
+  const groceries = data.groceries
   const charts: Record<Track, ChartSpec> = {
     category: {
       kind: 'donut',
@@ -90,6 +93,7 @@ export function MonthView({ customerId, onOpenTransactions, onOpenPayday }: {
 
   return (
     <main>
+      {groceries && <h1>Budget · {data.month}</h1>}
       <div className="stat-grid">
         <div className="stat">
           <small>Balance</small>
@@ -110,7 +114,7 @@ export function MonthView({ customerId, onOpenTransactions, onOpenPayday }: {
       </div>
 
       <div className="track-chips">
-        <button onClick={onOpenTransactions}>Browse transactions</button>
+        <button onClick={() => onOpenTransactions()}>Browse transactions</button>
         <button onClick={onOpenPayday}>Check before payday</button>
       </div>
 
@@ -132,6 +136,40 @@ export function MonthView({ customerId, onOpenTransactions, onOpenPayday }: {
       </div>
 
       <ChartCard chart={charts[track]} />
+
+      {groceries && (
+        <section className="welcome grocery-insights">
+          <h2>Inside your grocery spending</h2>
+          <small>{groceries.start} to {groceries.end} · Based on store receipts</small>
+          <p><strong>€{groceries.total_eur.toFixed(2)}</strong> across {groceries.visits} purchases,
+            about {groceries.trips_per_week} per week.</p>
+          {groceries.small_trips > 0 && (
+            <p>{groceries.small_trips} purchases of €20 or less added up to €{groceries.small_trip_total_eur.toFixed(2)}.
+              {groceries.trips_per_week > 1 && ' Try one planned shop each week and keep a list for top-ups.'}</p>
+          )}
+          {groceries.experiment && (
+            <p><strong>Try a smaller treat budget.</strong> You spent €{groceries.experiment.baseline_eur.toFixed(2)} on{' '}
+              {groceries.experiment.category.toLowerCase()}. Aim for €{groceries.experiment.target_eur.toFixed(2)} over a similar period.</p>
+          )}
+          <div className="track-chips">
+            <button onClick={onAskGroceryPlan}>Ask Aino for a plan</button>
+            <button onClick={() => onOpenTransactions({
+              category: 'Groceries', start: groceries.start, end: groceries.end,
+            })}>See grocery purchases</button>
+          </div>
+          <details className="receipt-details">
+            <summary>See spending by product</summary>
+            <ul>
+              {groceries.categories.map((category) => (
+                <li key={category.name}>
+                  <span>{category.name}<small>In {category.visits} purchases</small></span>
+                  <strong>€{category.spent_eur.toFixed(2)}</strong>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </section>
+      )}
 
       {track === 'benchmark' && bench && (
         <div className="bench-story">
@@ -180,7 +218,7 @@ export function MonthView({ customerId, onOpenTransactions, onOpenPayday }: {
         </div>
       )}
 
-      {plan && (
+      {plan && !groceries && (
         <div className="plan-card">
           <div className="plan-head">
             <strong>Your coaching plan</strong>

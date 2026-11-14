@@ -41,7 +41,7 @@ TYPESAFE_MODEL = os.getenv("TYPESAFE_MODEL", "jev-latest")
 DEMO_CUSTOMER_ID = os.getenv("DEMO_CUSTOMER_ID", "CUST00001")
 
 DATA_DIR = ROOT / "data"
-DB_PATH = DATA_DIR / "spanki.duckdb"
+DB_PATH = DATA_DIR / "aino-money.duckdb"
 JEV_CACHE_PATH = DATA_DIR / "jev_merchant_cache.json"
 
 TX_PATH = ROOT.parent / "tx_junction_transactions.txt"

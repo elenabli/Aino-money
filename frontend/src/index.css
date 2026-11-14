@@ -1109,3 +1109,294 @@ footer button:disabled {
   color: var(--sbank-green-dark);
   text-align: left;
 }
+
+.receipt-details {
+  margin-top: 0.75rem;
+}
+
+.receipt-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.receipt-details ul {
+  list-style: none;
+  padding: 0;
+}
+
+.receipt-details li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.receipt-details li small {
+  display: block;
+}
+
+.receipt-details li strong {
+  white-space: nowrap;
+}
+
+.grocery-insights h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+}
+
+.grocery-insights .track-chips {
+  margin-top: 0.75rem;
+}
+
+.coach-next {
+  width: 100%;
+  margin: 0.25rem 0 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: #087738;
+  color: white;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.coach-next:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.bank-home {
+  padding: 0;
+  gap: 0;
+  background: #e8f5e9;
+  color: #202520;
+}
+
+.bank-bonus {
+  background: #fff;
+  color: #007741;
+  text-align: center;
+  padding: calc(14px + env(safe-area-inset-top)) 7.5% 22px;
+}
+
+.bank-home-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  font-weight: 750;
+  color: var(--text);
+}
+
+.bank-home-top button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 13px;
+  background: #e8f5e9;
+  color: #007741;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.bank-bonus h1 {
+  margin: 0 0 7px;
+  font-size: clamp(18px, 5vw, 23px);
+  letter-spacing: -0.025em;
+}
+
+.bank-bonus p {
+  margin: 0 0 15px;
+  font-size: 14px;
+}
+
+.bonus-level {
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 3px;
+  border-bottom: 1px solid currentColor;
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.bonus-level.next {
+  margin-bottom: 13px;
+  border-bottom-style: dashed;
+  font-weight: 450;
+}
+
+.bonus-house {
+  width: min(68%, 270px);
+  margin: -2px auto 12px;
+  padding: 39px 8px 16px;
+  background: #007741;
+  clip-path: polygon(50% 0, 100% 24%, 100% 100%, 0 100%, 0 24%);
+  border-radius: 7px;
+  color: #fff;
+  font-weight: 700;
+}
+
+.bonus-house strong {
+  display: block;
+  font-size: clamp(36px, 10vw, 50px);
+  line-height: 1.12;
+  letter-spacing: -0.05em;
+}
+
+.bank-bonus > small,
+.bank-card-label small {
+  color: #54635a;
+  font-size: 12px;
+}
+
+.bank-accounts {
+  padding: 18px 5% 24px;
+}
+
+.bank-coach {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: #007741;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bank-coach strong { font-size: 17px; }
+
+.bank-coach small {
+  display: block;
+  margin-top: 3px;
+  color: #54635a;
+  font-size: 12px;
+}
+
+.bank-coach > span:last-child { font-size: 25px; }
+
+.bank-coach-icon {
+  display: grid;
+  place-items: center;
+  width: 43px;
+  height: 43px;
+  border-radius: 50%;
+  background: #007741;
+  color: #fff;
+}
+
+.bank-accounts h2 {
+  color: #007741;
+  font-size: 21px;
+  margin: 21px 0 12px;
+}
+
+.bank-account-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 0 15px;
+}
+
+.bank-account {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 61px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  font-size: 17px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bank-account strong { color: #007741; }
+
+.bank-card-label {
+  display: grid;
+  gap: 3px;
+  padding: 15px 0;
+  font-size: 15px;
+}
+
+.bank-home-entry {
+  padding: calc(14px + env(safe-area-inset-top)) 5% 14px;
+}
+
+.bank-home-entry .bank-coach {
+  border: 1px solid #c6e3ce;
+}
+
+.bank-home .bank-bonus {
+  padding-top: 14px;
+}
+
+.transaction-review {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+}
+
+.transaction-review strong,
+.chat-overview strong {
+  color: var(--sbank-green-dark);
+}
+
+.chat-overview p + p {
+  margin-top: 8px;
+}
+
+.chat-overview h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.adviser-check-in .adviser-period {
+  margin-block: 0 5px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sbank-green-dark);
+}
+
+.adviser-check-in .reset-btn {
+  margin-top: 8px;
+}
+
+.adviser-outlook {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f4f8f5;
+}
+
+.adviser-outlook h2 {
+  margin-bottom: 4px;
+}
+
+.adviser-outlook dl {
+  margin: 8px 0 0;
+}
+
+.adviser-outlook dl > div {
+  display: flex;
+  justify-content: space-between;
+  padding-block: 6px;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.adviser-outlook dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

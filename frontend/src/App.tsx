@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { type Persona, type SpendingScope, type ExperimentDraft } from './api'
+import { useEffect, useState } from 'react'
+import { fetchPersonas, type Persona, type SpendingScope, type ExperimentDraft } from './api'
 import { ChatView, type CoachTurn } from './components/ChatView'
 import { GoalsView } from './components/GoalsView'
 import { MonthView } from './components/MonthView'
@@ -7,12 +7,15 @@ import { PersonaView } from './components/PersonaView'
 import { TransactionsView } from './components/TransactionsView'
 import { PaydayCard } from './components/PaydayCard'
 import { SimulateView } from './components/SimulateView'
-import { ChartIcon, ChatIcon, DiceIcon, TargetIcon, UserIcon } from './components/icons'
+import { ChartIcon, ChatIcon, DiceIcon, HomeIcon, TargetIcon, UserIcon } from './components/icons'
+
+import { BankHome } from './components/BankHome'
 
 const TABS = [
+  { id: 'home', label: 'Koti', Icon: HomeIcon },
   { id: 'persona', label: 'Persona', Icon: UserIcon },
-  { id: 'chat', label: 'Coach', Icon: ChatIcon },
-  { id: 'month', label: 'Month', Icon: ChartIcon },
+  { id: 'chat', label: 'Chat', Icon: ChatIcon },
+  { id: 'month', label: 'Spending', Icon: ChartIcon },
   { id: 'goals', label: 'Goals', Icon: TargetIcon },
   { id: 'sim', label: 'Simulate', Icon: DiceIcon },
 ] as const
@@ -21,7 +24,7 @@ type Tab = (typeof TABS)[number]['id'] | 'transactions' | 'payday'
 
 function storedPersona(): Persona | null {
   try {
-    const raw = localStorage.getItem('spanki_persona')
+    const raw = localStorage.getItem('aino_money_persona')
     if (!raw) return null
     const persona = JSON.parse(raw)
     return typeof persona?.id === 'string' && typeof persona.name === 'string' ? persona : null
@@ -32,7 +35,23 @@ function storedPersona(): Persona | null {
 
 export default function App() {
   const [persona, setPersona] = useState(storedPersona)
-  const [tab, setTab] = useState<Tab>(persona ? 'chat' : 'persona')
+  const [tab, setTab] = useState<Tab>('home')
+  const [homeLoadFailed, setHomeLoadFailed] = useState(false)
+  const [homeAttempt, setHomeAttempt] = useState(0)
+  const personaId = persona?.id
+
+  useEffect(() => {
+    let current = true
+    fetchPersonas().then((profiles) => {
+      if (!current) return
+      const selected = profiles.find((profile) => profile.id === personaId)
+        ?? profiles.find((profile) => profile.id === 'DEMO-SETUKORTTI')
+        ?? profiles[0]
+      if (selected) setPersona(selected)
+      else setHomeLoadFailed(true)
+    }).catch(() => { if (current) setHomeLoadFailed(true) })
+    return () => { current = false }
+  }, [personaId, homeAttempt])
   const [hasOpenedSimulation, setHasOpenedSimulation] = useState(false)
   const [simulationVersion, setSimulationVersion] = useState(0)
   const [scope, setScope] = useState<SpendingScope>({})
@@ -60,7 +79,7 @@ export default function App() {
     setPersona(p)
     setTab('chat')
     try {
-      localStorage.setItem('spanki_persona', JSON.stringify(p))
+      localStorage.setItem('aino_money_persona', JSON.stringify(p))
     } catch {
       // The demo still works when the browser blocks storage.
     }
@@ -70,13 +89,26 @@ export default function App() {
 
   return (
     <div className="phone">
-      <header>
+      {tab !== 'home' && <header>
         <div className="avatar">{persona ? persona.name[0] : 'S'}</div>
         <div className="who">
-          <strong>{persona ? `${persona.name}, ${persona.age} · S-Bank demo` : 'Aino · Money coach'}</strong>
+          <strong>{persona ? `${persona.name}, ${persona.age} · Aino Money` : 'Aino Money · Money coach'}</strong>
           <small>{persona ? `${persona.label} · Synthetic data` : 'Choose a persona to begin'}</small>
         </div>
-      </header>
+      </header>}
+
+      {tab === 'home' && (
+        <div className="view">
+          <BankHome
+            persona={persona}
+            failed={homeLoadFailed}
+            onRetry={() => { setHomeLoadFailed(false); setHomeAttempt((attempt) => attempt + 1) }}
+            onChat={() => openTab('chat')}
+            onAccount={() => openTransactions()}
+            onPersona={() => openTab('persona')}
+          />
+        </div>
+      )}
 
       {tab === 'persona' && (
         <div className="view">
@@ -99,7 +131,11 @@ export default function App() {
         </div>
       )}
       {cid && tab === 'month' && (
-        <div className="view"><MonthView customerId={cid} onOpenTransactions={() => openTransactions()} onOpenPayday={() => openTab('payday')} /></div>
+        <div className="view"><MonthView customerId={cid} onOpenTransactions={openTransactions} onOpenPayday={() => openTab('payday')}
+          onAskGroceryPlan={() => {
+            setLinkedTurn({ question: 'How can I spend less on groceries?', prompt: 'grocery_plan' })
+            setTab('chat')
+          }} /></div>
       )}
       {cid && tab === 'goals' && (
         <div className="view"><GoalsView customerId={cid} draft={draft} onResetSimulation={() => setSimulationVersion((version) => version + 1)} /></div>
@@ -111,8 +147,8 @@ export default function App() {
             customerId={cid}
             scope={scope}
             onClear={() => openTransactions()}
-            onAsk={(query, question) => {
-              setLinkedTurn({ question, prompt: 'transaction_spending', scope: query })
+            onAsk={(transactionId, question) => {
+              setLinkedTurn({ question, prompt: 'transaction_detail', scope: { transaction_id: transactionId } })
               setTab('chat')
             }}
           />
@@ -128,12 +164,12 @@ export default function App() {
       )}
 
       <nav className="tabbar" aria-label="Demo navigation">
-        {TABS.map(({ id, label, Icon }) => (
+        {TABS.filter(({ id }) => id !== 'sim' || tab === 'sim').map(({ id, label, Icon }) => (
           <button
             key={id}
             className={tab === id || (id === 'month' && (tab === 'transactions' || tab === 'payday')) ? 'active' : ''}
             aria-current={tab === id ? 'page' : undefined}
-            disabled={id !== 'persona' && !cid}
+            disabled={id !== 'home' && id !== 'persona' && !cid}
             onClick={() => openTab(id)}
           >
             <Icon />

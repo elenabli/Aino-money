@@ -5,9 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from openai import APIError
 from pydantic import BaseModel, Field
 
-from . import chat, config, db, tools
+from . import advice, chat, config, db, receipts, tools
 
-app = FastAPI(title="spanki")
+app = FastAPI(title="Aino Money")
 
 app.add_middleware(
     CORSMiddleware,
@@ -56,6 +56,7 @@ class ChatRequest(BaseModel):
     category: str | None = Field(default=None, max_length=100)
     month_offset: int = Field(default=1, ge=1, le=24)
     compare: bool = False
+    transaction_id: int | None = Field(default=None, ge=0)
     start: date | None = None
     end: date | None = None
     basket: str | None = Field(default=None, max_length=40)
@@ -70,7 +71,18 @@ def health():
 @app.get("/personas")
 def personas():
     out = []
-    for p in PERSONAS:
+    with db.connect() as con:
+        has_receipts = con.execute("SELECT 1 FROM customers WHERE customer_id = ?", [receipts.CUSTOMER_ID]).fetchone()
+    available = PERSONAS
+    if has_receipts:
+        available = [*PERSONAS, {
+            "id": receipts.CUSTOMER_ID,
+            "name": "Sofia",
+            "age": receipts.AGE,
+            "label": "Budget + grocery receipts",
+            "description": "Explore a synthetic budget with itemised supermarket purchases.",
+        }]
+    for p in available:
         bal = tools.current_balance(p["id"])["balance_eur"] or 0
         income = tools.monthly_income(p["id"])["median_monthly_income"]
         out.append({**p, "balance_eur": bal, "median_income_eur": income})
@@ -86,6 +98,8 @@ def profile(customer_id: str | None = Query(default=None)):
         [cid],
     ).fetchone()
     con.close()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Customer not found.")
     return {"customer_id": row[0], "postal_code": row[1], "age": row[2]}
 
 
@@ -93,6 +107,11 @@ def profile(customer_id: str | None = Query(default=None)):
 def chat_endpoint(req: ChatRequest):
     cid = req.customer_id or config.DEMO_CUSTOMER_ID
     msgs = [m.model_dump() for m in req.messages]
+    if req.prompt in {"transaction_detail", "receipt_breakdown", "category_context"}:
+        transaction = tools.spending_transaction(cid, req.transaction_id) if req.transaction_id is not None else None
+        if transaction is None:
+            raise HTTPException(status_code=404, detail="Transaction not found.")
+        return chat.transaction_answer(req.prompt, cid, transaction)
     if req.prompt is not None:
         return chat.starter_answer(
             req.prompt, cid, req.category, req.month_offset,
@@ -116,6 +135,14 @@ def transactions(customer_id: str | None = None, start: date | None = None, end:
     )
 
 
+@app.get("/receipts/{receipt_id}")
+def receipt_details(receipt_id: str, customer_id: str):
+    receipt = receipts.details(receipt_id, customer_id)
+    if receipt is None:
+        raise HTTPException(status_code=404, detail="Receipt not found.")
+    return receipt
+
+
 @app.get("/payday")
 def payday(customer_id: str | None = None, purchase_eur: float = Query(default=0, ge=0, le=1e7),
            buffer_eur: float = Query(default=100, ge=0, le=1e7)):
@@ -135,13 +162,18 @@ def overview(customer_id: str | None = Query(default=None)):
 
 @app.get("/monthly")
 def monthly(customer_id: str | None = Query(default=None)):
-    return tools.monthly_overview(_cid(customer_id))
+    cid = _cid(customer_id)
+    return {**tools.monthly_overview(cid), "groceries": receipts.grocery_insights(cid)}
 
 
 @app.get("/welcome")
 def welcome(customer_id: str | None = Query(default=None)):
+    cid = _cid(customer_id)
     return {
-        "message": tools.welcome_message(_cid(customer_id)),
+        "message": tools.welcome_message(cid),
+        "goal_plan": tools.apartment_plan(cid),
+        "check_in": advice.check_in(cid),
+        "has_grocery_receipts": cid == receipts.CUSTOMER_ID,
         "chat_available": bool(config.CHAT_API_KEY),
     }
 

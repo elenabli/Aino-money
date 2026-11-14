@@ -1,14 +1,18 @@
 import datetime
 import hashlib
 import json
+import os
 from typing import Literal
 
+from fastapi.encoders import jsonable_encoder
 from openai import OpenAI
 
-from . import config, tools
+from . import advice, config, receipts, tools
 
 
 def _log_chat(customer_id: str, messages: list[dict], result: dict) -> None:
+    if os.getenv("AINO_MONEY_LOG_CHAT") == "0":
+        return
     try:
         import csv
 
@@ -38,38 +42,121 @@ def _client_headers(customer_id: str, messages: list[dict]) -> dict:
         headers["x-opencode-session"] = f"ses_{digest}"
     return headers
 
-SYSTEM_PROMPT = """You are Aino, a friendly financial coach inside the S-Bank app. You have read-only access
-to the user's own transaction data (synthetic demo data). Your mission: help people understand where their
-money goes, in plain language, and nudge them towards healthier habits.
+SYSTEM_PROMPT = """You are Aino, a proactive personal money adviser inside the S-Bank app.
+Help this user understand a purchase, anticipate the next week or two, and make progress on
+what matters to them. Analyse the available evidence before replying; do not wait for the user
+to ask you to investigate. Transaction data is synthetic demo data, accessible for this user only.
+You can propose changes; creating a goal or starting an experiment requires the user's request.
 
-Pedagogy: explain spending using three baskets:
-1. Mandatory & regular (rent, utilities, subscriptions) - fixed costs
-2. Mandatory & irregular (unexpected necessities: broken washing machine, car repair)
-3. Everyday spending that slips through your fingers (coffees, eating out, impulse buys)
+On every turn:
+- Answer the actual question first. Review the supplied persona, active goal, current 14-day
+  check-in, upcoming commitments and conversation before deciding whether a nudge is useful.
+- Use the latest 7-14 days for near-term advice, normally comparing the check-in's 14 days with
+  the previous 14 days. Resolve dates against the supplied demo date, not the real calendar.
+  Honour explicitly requested historical periods. Never compare a partial month to a full month
+  as though both covered the same time. Fetch missing evidence with tools before making claims.
+- Consider the check-in's three paths: current pace, 10% less flexible spending, and 20% less.
+  These are alternatives, not cumulative savings or commitments. For a planning question,
+  show the baseline and the two alternatives compactly, with the horizon and assumptions.
+  For a narrow question, surface only the most relevant finding; do not dump scenarios every turn.
+- Choose at most one proactive observation: an evidenced cash shortfall or upcoming bill first,
+  then a material change affecting the user's goal, then a useful spending pattern. Connect it
+  to the active goal by name when relevant. Acknowledge progress as well as risks. If nothing
+  useful has changed, simply answer. Do not manufacture a problem to sound proactive.
 
-Rules:
-- Answer ONLY with numbers returned by your tools. Never invent or estimate figures.
-- BE BRIEF: 1-3 short sentences, flowing text. No markdown lists, no bold, no bullet points unless the user explicitly asks for a breakdown.
-- A chart is shown next to your answer when relevant: don't repeat its numbers, just give the one-line takeaway (e.g. "You spent most on housing - about 30% of your money went there.").
-- Merchant identifiers are anonymized codes like MRC-RES-0068. Never invent merchant names;
-  refer to them as "a restaurant you visit" or by their code.
-- YOU ARE THE FINANCIAL COACH. Never tell the user to "consult a financial advisor", "speak to your bank", or give
-  similar deflections. The whole point of this app is that the coaching comes from you. Always give concrete,
-  numbers-based guidance from the data: which categories to trim and by how much, or offer to start a savings
-  goal or an experiment right here. When a scenario doesn't fit the budget, use the scenario tool and present
-  its cover options.
-- When the user describes a hypothetical change ("what if my rent goes up by X", "if I bought Y"), use the
-  scenario tool with the monthly amount.
-- When the user asks about upcoming payments, the next salary, bills, or whether money will last,
-  use the upcoming_events tool. If it reports a low-balance risk, lead with that warning.
-- Use euros, format like 42.10 EUR. Prefer weekly/monthly framing.
-- Be warm, short and concrete. Use simple Finnish everyday language vibes but reply in the language the user writes in.
-- When relevant, mention the basket a number belongs to.
-- If the user asks about other people or other customers, politely decline - you only see their own data.
-- Never give investment advice. Safe-to-spend guidance is fine.
+Goals and personalisation:
+- Persona preferences guide both tone and topic selection. The user's current words, priorities
+  and requested level of detail override the demo profile. Never infer personality, ability,
+  family circumstances or motives from age, purchases or an impulse score.
+- Use the supplied saved goal, target and recorded progress. Do not invent a goal or assume
+  its timeline is still desired. If no goal exists, give useful advice anyway; ask one brief
+  question about priorities only when it would change your recommendation.
+- Offer one achievable next step tied to the user's priorities, preserving essentials and a
+  buffer. Explain a trade-off rather than prescribing austerity. Do not imply a simulated
+  reduction is money already saved, or that a projected balance is all available for saving.
+- Never call goal_plan or challenge merely to explore an option: they persist changes.
+  Use what_if for category reductions and scenario for an added recurring monthly cost.
+  Do not treat a one-off purchase as a new monthly expense. Use savings_goal_plan for the
+  apartment demo's budget analysis, not as a substitute for another user's active goal.
+
+When asked about a transaction:
+- Investigate and report findings immediately, without asking 'Would you like me to analyse it?'.
+  Identify the selected purchase from supplied context or recent_transactions; ask for clarification
+  only if the purchase is ambiguous. Keep its amount separate from wider category totals.
+- Use itemised receipt facts already supplied for this purchase. With receipt evidence, mention
+  sweets/snacks or another meaningful group neutrally, including its actual cost. Without an
+  itemised receipt, never infer products from the merchant or a supermarket category.
+- For broader grocery patterns call grocery_receipt_insights with explicit dates for the relevant
+  7-14-day window; its default is longer. Shopping visits are inferred from receipts.
+  Use spend_by_category for broader category comparisons, with matching date windows.
+- Explain one useful implication: how it compares with recent similar spending, or how a repeated
+  pattern relates to the user's goal or budget. One purchase does not prove a habit.
+  If evidence is insufficient, state that briefly and give the verified facts.
+- Sweets and discretionary purchases are not automatically unnecessary or unhealthy. Only use
+  'unnecessary' as the user's own description of spending they want to change. Respect treats,
+  convenience and enjoyment. Do not shame, diagnose, moralise or assume a purchase was avoidable.
+
+Stay helpful without becoming annoying:
+- Normally use 2-4 short sentences: finding, implication, and optionally one gentle next step.
+  Allow a compact list or more detail for scenario comparisons, breakdowns or explicit requests.
+  Do not finish every answer with a question, a sales pitch or an invitation to do the analysis.
+- Check conversation history before nudging. Do not repeat an unchanged recommendation, ask
+  again about an answered goal, or keep pushing a declined suggestion. If the user wants facts
+  only or no coaching, respect that preference. Do not claim memory outside supplied context.
+- Be warm, clear and concrete; match the user's language. Avoid canned praise, jargon and
+  paternalistic language. Explain numbers that matter without narrating every value in a chart.
+
+Evidence and tool discipline:
+- Financial amounts and comparisons must come from tools or the supplied grounded context.
+  Never invent amounts, merchant names, progress, dates or forecast certainty. User-provided
+  hypothetical amounts can be tool inputs. If data is missing or a tool fails, say what is unknown.
+- Label projections and what-if results as estimates. State their period and assumptions:
+  the check-in extrapolates recent flexible spending and, when available, subtracts it from
+  balance after predicted bills before payday. It is not a complete guarantee of affordability;
+  irregular costs or missing transactions may be absent. With no predicted payday, its horizon
+  is the supplied number of days, not 'until payday'. Do not annualise a short spike as a fact.
+- For upcoming payments, next income or whether money will last, call upcoming_events.
+  Lead with an evidenced low-balance risk. If a recurring-cost scenario exceeds the budget,
+  explain the remaining gap and feasible spending reductions; moving money to savings does
+  not close a deficit. Check essentials and irregular expenses before suggesting a transfer.
+- For a new savings plan, explain one next step: cover bills, allow for irregular expenses,
+  cap flexible spending, then save verified surplus. An envelope is a limit for one kind of spending.
+- For comparisons, include categories present in only one period as zero in the other. Use
+  'largest increase' only after comparing all relevant categories. Do not treat heuristic
+  impulse scores, inferred subscriptions or suggested cuts as proven needs or waste.
+- Use the three spending baskets only when they clarify the answer: regular essentials,
+  irregular essentials, and flexible everyday spending. Do not assume every flexible cost is expendable.
+- Use euros (42.10 EUR) and weekly/monthly framing with explicit dates where useful.
+  Anonymised merchants remain codes or category descriptions; receipt merchant names are valid.
+- Access only this user's data. Decline requests for other customers' personal information;
+  benchmark may provide aggregate demo peer comparisons when requested, not an 'average Finn'.
+- Stay within budgeting and spending guidance; do not recommend investments. Give useful answers
+  within the available evidence rather than generic deflections to an adviser or bank.
 """
 
 TOOL_SPECS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "savings_goal_plan",
+            "description": "Savings goal and last full month's recorded cash flow for the apartment demo. Includes a 20% dining cut and its impact on the month.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "grocery_receipt_insights",
+            "description": "Grocery receipt breakdown by product category, shopping frequency, small trips (20 EUR or less), and a proposed 20% cut in the largest snack or treat category. Defaults to the latest 12 weeks with receipts.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start": {"type": "string", "description": "Inclusive YYYY-MM-DD"},
+                    "end": {"type": "string", "description": "Inclusive YYYY-MM-DD"},
+                },
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -269,6 +356,7 @@ TOOL_IMPL = {
     "current_balance": lambda cid, a: tools.current_balance(cid),
     "subscriptions": lambda cid, a: tools.subscriptions(cid),
     "safe_to_spend": lambda cid, a: tools.safe_to_spend(cid),
+    "scenario": lambda cid, a: tools.scenario(cid, a["description"], float(a["monthly_eur"])),
     "what_if": lambda cid, a: tools.what_if(cid, a["category"], float(a["change_pct"])),
     "spender_profile": lambda cid, a: tools.spender_profile(cid),
     "upcoming_events": lambda cid, a: tools.upcoming_events(cid),
@@ -277,6 +365,8 @@ TOOL_IMPL = {
     "goal_plan": lambda cid, a: tools.set_goal(cid, a["name"], float(a["target_eur"]), a.get("months")),
     "challenge": lambda cid, a: tools.create_challenge(cid, a["category"], float(a["pct"]), int(a.get("days", 14))),
     "challenge_progress": lambda cid, a: tools.challenge_progress(cid),
+    "savings_goal_plan": lambda cid, a: tools.apartment_plan(cid),
+    "grocery_receipt_insights": lambda cid, a: receipts.grocery_insights(cid, a.get("start"), a.get("end")),
     "recent_transactions": lambda cid, a: tools.recent_transactions(cid, a.get("limit", 10)),
     "top_merchants": lambda cid, a: tools.top_merchants(cid, a.get("category"), a.get("months", 3)),
 }
@@ -388,13 +478,27 @@ def _make_chart(tool_name: str, result: dict) -> dict | None:
     return None
 
 
-CoachPrompt = Literal["weekly_budget", "spending_profile", "dining_savings", "monthly_spending", "transaction_spending"]
+StarterPrompt = Literal["weekly_budget", "spending_profile", "dining_savings", "monthly_spending", "transaction_spending", "grocery_plan", "apartment_plan"]
+TransactionPrompt = Literal["transaction_detail", "receipt_breakdown", "category_context"]
+CoachPrompt = StarterPrompt | TransactionPrompt
+
 
 
 def _answer_metadata(trace: list[dict]) -> dict:
     metadata: dict = {"evidence": []}
     for entry in trace:
         tool, result = entry["tool"], entry["result"]
+        if tool == "savings_goal_plan" and result:
+            metadata["evidence"].append({
+                "start": result["start"], "end": result["end"], "category": "Restaurants", "label": "Dining",
+            })
+            if result["reduction_eur"] > 0:
+                metadata["experiment"] = {"category": "Restaurants", "pct": 20, "days": 14}
+        if tool == "grocery_receipt_insights" and result:
+            metadata["evidence"].append({
+                "start": result["start"], "end": result["end"], "category": "Groceries",
+                "count": result["visits"], "label": "Grocery purchases",
+            })
         if tool in {"spend_by_category", "transaction_list", "basket_breakdown"}:
             scope = {"start": result["start"], "end": result["end"], "category": result.get("category")}
             if tool == "basket_breakdown":
@@ -419,12 +523,122 @@ def _answer_metadata(trace: list[dict]) -> dict:
     return metadata
 
 
-def starter_answer(prompt: CoachPrompt, customer_id: str, category: str | None = None,
+TRANSACTION_EXPLANATIONS = {
+    "mandatory_regular": "Aino groups this with regular essentials.",
+    "mandatory_irregular": "Aino groups this with unexpected essentials that can make a month more expensive.",
+    "everyday_discretionary": "Aino groups this with everyday spending you can review.",
+    "savings_investing": "Aino groups this with money you set aside.",
+}
+
+
+def transaction_answer(prompt: TransactionPrompt, customer_id: str, row: dict) -> dict:
+    category = row["category"]
+    day = datetime.date.fromisoformat(row["date"])
+    end = min(
+        (day.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1),
+        tools.ref_date(customer_id),
+    )
+    month_scope = {"category": category, "start": day.replace(day=1).isoformat(), "end": end.isoformat()}
+    topics = [
+        {"label": "See spending in this category", "question": f"How much did I spend on {category.lower()} in {day:%B}?",
+         "prompt": "category_context"},
+        {"label": "Check my weekly budget", "question": "How much is safe to spend this week?", "prompt": "weekly_budget"},
+    ]
+    receipt_id = row.get("receipt_id")
+    if receipt_id:
+        topics.insert(0, {"label": "Break down this receipt", "question": "What did I buy on this receipt?",
+                          "prompt": "receipt_breakdown"})
+
+    evidence = []
+    if prompt == "category_context":
+        totals = tools.transaction_list(customer_id, **month_scope)
+        count = totals["count"]
+        answer = (
+            f"In {day:%B %Y} through {end:%d %B}, you spent **€{totals['total_eur']:.2f}** on "
+            f"{category.lower()} across {count} {'purchase' if count == 1 else 'purchases'}. "
+            f"This purchase accounted for €{row['amount_eur']:.2f} of that total."
+        )
+        evidence.append({**month_scope, "label": category, "count": count})
+    elif prompt == "receipt_breakdown":
+        receipt = receipts.details(receipt_id, customer_id) if receipt_id else None
+        if receipt and receipt["categories"]:
+            breakdown = ", ".join(f"{item['name']} (€{item['amount_eur']:.2f})" for item in receipt["categories"][:3])
+            answer = f"This **€{receipt['total_eur']:.2f}** receipt includes {len(receipt['items'])} line items. The largest groups were {breakdown}."
+        else:
+            answer = "There is no itemised receipt for this purchase."
+    else:
+        merchant = f" at {row['merchant']}" if row["merchant"] else ""
+        answer = f"You spent **€{row['amount_eur']:.2f}** on {category.lower()}{merchant} on {day:%d %B %Y}."
+        receipt = receipts.details(receipt_id, customer_id) if receipt_id else None
+        finding = advice.receipt_finding(receipt["categories"]) if receipt else None
+        if finding is None:
+            past = tools.transaction_list(
+                customer_id, start=(day - datetime.timedelta(days=14)).isoformat(),
+                end=(day - datetime.timedelta(days=1)).isoformat(), category=category, basket=row["basket"],
+            )
+            if past["count"]:
+                typical = past["total_eur"] / past["count"]
+                if typical > 0 and row["amount_eur"] >= typical * 1.25:
+                    finding = f"This was above your €{typical:.2f} average across {past['count']} similar purchases in the prior 14 days."
+                else:
+                    finding = f"Similar purchases averaged €{typical:.2f} in the prior 14 days."
+        finding = finding or TRANSACTION_EXPLANATIONS.get(row["basket"])
+        if finding:
+            answer += f" {finding}"
+
+    return {"answer": answer, "trace": [], "evidence": evidence,
+            "topics": [topic for topic in topics if topic["prompt"] != prompt]}
+
+
+def starter_answer(prompt: StarterPrompt, customer_id: str, category: str | None = None,
                    month_offset: int = 1, start: str | None = None, end: str | None = None,
                    basket: str | None = None, compare: bool = False) -> dict:
     args = {}
     comparison = None
-    if prompt == "weekly_budget":
+    if prompt == "apartment_plan":
+        tool_name = "savings_goal_plan"
+        result = tools.apartment_plan(customer_id)
+        if result is None:
+            return {"answer": "There is no apartment plan for this profile.", "trace": []}
+        net = result["net_eur"]
+        after = result["projected_net_eur"]
+        needed = result["needed_monthly_eur"]
+        goal = (
+            f"Your {result['goal'].lower()} needs €{needed:.2f} a month at your chosen pace."
+            if needed is not None else f"Your {result['goal'].lower()} is set up."
+        )
+        cash_flow = (
+            f"Last month you spent €{-net:.2f} more than you earned."
+            if net < 0 else f"Last month you had €{net:.2f} left after spending."
+        )
+        outcome = (
+            f"That would still leave a €{-after:.2f} gap. Review another expense or adjust the timeline once the budget breaks even."
+            if after < 0 else f"That would leave €{after:.2f} before setting aside a buffer."
+        )
+        answer = (
+            f"{goal} {cash_flow} Start with three envelopes: bills, a buffer for irregular costs, "
+            f"and everyday spending. An envelope is a limit you set before spending. "
+            f"Try capping dining at €{result['dining_cap_eur']:.2f} next month, "
+            f"down from €{result['dining_eur']:.2f}. {outcome}"
+        )
+    elif prompt == "grocery_plan":
+        tool_name = "grocery_receipt_insights"
+        result = receipts.grocery_insights(customer_id)
+        if result is None:
+            return {"answer": "There are no grocery receipts for this profile.", "trace": []}
+        experiment = result["experiment"]
+        answer = (
+            f"From {result['start']} to {result['end']}, your receipts show {result['visits']} grocery trips "
+            f"({result['trips_per_week']:g} per week)."
+        )
+        if result["trips_per_week"] > 1 and result["small_trips"]:
+            answer += " Try one planned shop each week and keep a list for top-ups."
+        if experiment:
+            answer += (
+                f" Over a similar period, aim for €{experiment['target_eur']:.2f} on "
+                f"{experiment['category'].lower()}, down from €{experiment['baseline_eur']:.2f}."
+            )
+    elif prompt == "weekly_budget":
         tool_name = "safe_to_spend"
         result = tools.safe_to_spend(customer_id)
         weekly = result["safe_to_spend_weekly"]
@@ -444,8 +658,8 @@ def starter_answer(prompt: CoachPrompt, customer_id: str, category: str | None =
             answer = "There’s no spending in the three months covered by this demo."
     elif prompt in {"monthly_spending", "transaction_spending"}:
         if prompt == "monthly_spending":
-            start = tools.months_ago(month_offset + 1)
-            end = (datetime.date.fromisoformat(tools.months_ago(month_offset)) - datetime.timedelta(days=1)).isoformat()
+            start = tools.months_ago(month_offset + 1, customer_id)
+            end = (datetime.date.fromisoformat(tools.months_ago(month_offset, customer_id)) - datetime.timedelta(days=1)).isoformat()
         tool_name = "transaction_list"
         args = {"start": start, "end": end, "category": category, "basket": basket}
         result = tools.transaction_list(customer_id, **args)
@@ -459,8 +673,8 @@ def starter_answer(prompt: CoachPrompt, customer_id: str, category: str | None =
         if prompt == "monthly_spending" and compare and month_offset >= 2:
             comparison_args = {
                 **args,
-                "start": tools.months_ago(month_offset),
-                "end": (datetime.date.fromisoformat(tools.months_ago(month_offset - 1)) - datetime.timedelta(days=1)).isoformat(),
+                "start": tools.months_ago(month_offset, customer_id),
+                "end": (datetime.date.fromisoformat(tools.months_ago(month_offset - 1, customer_id)) - datetime.timedelta(days=1)).isoformat(),
             }
             comparison = tools.transaction_list(customer_id, **comparison_args)
             comparison.pop("rows")
@@ -493,7 +707,9 @@ def chat(messages: list[dict], customer_id: str) -> dict:
         timeout=20.0,
         max_retries=0,
     )
-    system = f"{SYSTEM_PROMPT}\nThe demo transaction date is {tools.ref_date().isoformat()}. Resolve relative dates against it."
+    system = f"{SYSTEM_PROMPT}\nThe demo transaction date is {tools.ref_date(customer_id).isoformat()}. Resolve relative dates against it."
+    system += f"\nPersona preferences: {advice.profile(customer_id)[1]}"
+    system += "\nCurrent check-in (grounded in demo data): " + json.dumps(advice.check_in(customer_id), ensure_ascii=False)
     msgs = [{"role": "system", "content": system}, *messages]
 
     trace: list[dict] = []
@@ -515,7 +731,7 @@ def chat(messages: list[dict], customer_id: str) -> dict:
         for call in msg.tool_calls:
             name = call.function.name
             args = json.loads(call.function.arguments or "{}")
-            result = TOOL_IMPL[name](customer_id, args)
+            result = jsonable_encoder(TOOL_IMPL[name](customer_id, args))
             trace.append({"tool": name, "args": args, "result": result})
             if chart is None:
                 chart = _make_chart(name, result)
