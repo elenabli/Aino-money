@@ -19,9 +19,11 @@ export interface ChartSpec {
   series?: { name: string; data: number[] }[]
   unit?: 'eur' | 'pct'
   secondary?: { label: string; value: number; max: number }
+  note?: string | null
+  highlight?: { label: string; value: string }
 }
 
-export type CoachPrompt = 'weekly_budget' | 'spending_profile' | 'dining_savings' | 'monthly_spending' | 'transaction_spending' | 'grocery_plan' | 'apartment_plan' | 'transaction_detail' | 'receipt_breakdown' | 'category_context'
+export type CoachPrompt = 'recent_check_in' | 'spending_outlook' | 'weekly_budget' | 'spending_profile' | 'dining_savings' | 'monthly_spending' | 'transaction_spending' | 'grocery_plan' | 'apartment_plan' | 'transaction_detail' | 'receipt_breakdown' | 'category_context'
 
 export interface ChatTopic {
   label: string
@@ -33,6 +35,7 @@ export interface ChatScope extends SpendingScope {
   month_offset?: number
   compare?: boolean
   transaction_id?: number
+  receipt_id?: string
 }
 
 export interface ChatResponse {
@@ -42,6 +45,80 @@ export interface ChatResponse {
   evidence?: SpendingEvidence[]
   experiment?: ExperimentDraft
   topics?: ChatTopic[]
+  charts?: ChartSpec[]
+  followups?: string[]
+  receipt?: ReceiptInsight | null
+}
+
+export interface ReceiptGroup {
+  group: string
+  kind: 'staple' | 'treat' | 'convenience' | 'household' | 'fun' | 'transport'
+  kind_label: string
+  receipt_eur: number
+  month_eur: number
+  usual_eur: number
+  usual_month_eur: number
+  items: { name: string; category: string; amount_eur: number }[]
+  eval: { label: string; tone: 'good' | 'warn' | 'neutral'; text: string; ratio?: number }
+}
+
+export interface ReceiptInsight {
+  receipt_id: string
+  merchant: string
+  date: string
+  time: string | null
+  total_eur: number
+  item_count: number
+  month_label: string
+  comparison_note: string
+  treat_share_pct: number
+  groups: ReceiptGroup[]
+}
+
+export type StreamEvent =
+  | { type: 'tool'; tool: string; label: string }
+  | { type: 'chart'; chart: ChartSpec }
+  | { type: 'text'; delta: string }
+  | { type: 'reset' }
+  | { type: 'receipt'; receipt: ReceiptInsight }
+  | ({ type: 'done' } & ChatResponse)
+  | { type: 'error'; message: string }
+
+/** Free-form AI chat: streams tool steps, charts and answer text as they happen. */
+export async function streamChat(
+  messages: ChatMsg[],
+  customerId: string,
+  onEvent: (event: StreamEvent) => void,
+  context?: { receipt_id?: string; transaction_id?: number },
+): Promise<ChatResponse> {
+  const res = await fetch(`${API}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ messages, customer_id: customerId, ...context }),
+  })
+  if (!res.ok || !res.body) throw new Error(`chat failed: ${res.status}`)
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let done: ChatResponse | null = null
+  for (;;) {
+    const { value, done: finished } = await reader.read()
+    if (value) buffer += decoder.decode(value, { stream: true })
+    let cut
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const frame = buffer.slice(0, cut)
+      buffer = buffer.slice(cut + 2)
+      const line = frame.split('\n').find((l) => l.startsWith('data: '))
+      if (!line) continue
+      const event = JSON.parse(line.slice(6)) as StreamEvent
+      if (event.type === 'error') throw new Error(event.message)
+      if (event.type === 'done') done = event
+      onEvent(event)
+    }
+    if (finished) break
+  }
+  if (!done) throw new Error('chat ended early')
+  return done
 }
 
 const API = '/api'

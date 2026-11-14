@@ -55,3 +55,20 @@ export function DiceIcon({ size = 20 }: { size?: number }) {
     </svg>
   )
 }
+
+export function SparkIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2.5c.4 3.9 1.6 6.1 3.4 7.6 1.6 1.3 3.7 1.9 6.1 2.1-2.4.2-4.5.8-6.1 2.1-1.8 1.5-3 3.7-3.4 7.2-.4-3.5-1.6-5.7-3.4-7.2C7 13 4.9 12.4 2.5 12.2c2.4-.2 4.5-.8 6.1-2.1C10.4 8.6 11.6 6.4 12 2.5Z" />
+      <path d="M19 2c.15 1.4.6 2.2 1.3 2.7.5.4 1.1.6 1.7.7-.6.1-1.2.3-1.7.7-.7.5-1.15 1.3-1.3 2.6-.15-1.3-.6-2.1-1.3-2.6-.5-.4-1.1-.6-1.7-.7.6-.1 1.2-.3 1.7-.7.7-.5 1.15-1.3 1.3-2.7Z" opacity=".7" />
+    </svg>
+  )
+}
+
+export function SendIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  )
+}

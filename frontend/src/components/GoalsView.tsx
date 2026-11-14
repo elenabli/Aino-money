@@ -11,6 +11,7 @@ import {
   type Goal,
   type ExperimentDraft,
 } from '../api'
+import { SparkIcon } from './icons'
 
 const CATEGORIES = ['Restaurants', 'Entertainment', 'Groceries', 'Lifestyle', 'Travel']
 
@@ -18,10 +19,12 @@ export function GoalsView({
   customerId,
   draft,
   onResetSimulation,
+  onAsk,
 }: {
   customerId: string
   draft?: ExperimentDraft
   onResetSimulation: () => void
+  onAsk?: (question: string) => void
 }) {
   const [goal, setGoal] = useState<Goal | null>(null)
   const [name, setName] = useState('')
@@ -35,7 +38,7 @@ export function GoalsView({
   const [chCategory, setChCategory] = useState(draft?.category ?? CATEGORIES[0])
   const [chPct, setChPct] = useState(draft?.pct ?? 20)
   const [chDays, setChDays] = useState(draft?.days ?? 14)
-  const [replace, setReplace] = useState(false)
+  const [replace, setReplace] = useState(!!draft)
   const [challengeLoaded, setChallengeLoaded] = useState(false)
   const [chBusy, setChBusy] = useState(false)
   const [ffBusy, setFfBusy] = useState(false)
@@ -122,90 +125,14 @@ export function GoalsView({
   return (
     <main>
       <div className="welcome">
-        <h1>Savings goal</h1>
-        <p>
-          Tell me what you're saving for. I'll turn your safe-to-save into a weekly plan.
-        </p>
-        <form className="goal-form" onSubmit={submit}>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            aria-label="Savings goal name"
-            placeholder="What for? e.g. a bike"
-          />
-          <div className="goal-form-row">
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              aria-label="Target amount in euros"
-              placeholder="Amount (EUR)"
-              min="0.01"
-              step="0.01"
-              required
-              type="number"
-              inputMode="decimal"
-            />
-            <input
-              value={months}
-              onChange={(e) => setMonths(e.target.value)}
-              aria-label="Months to reach the goal"
-              placeholder="Months (optional)"
-              min="1"
-              type="number"
-              inputMode="numeric"
-            />
-          </div>
-          <button className="big-cta" disabled={busy || !name.trim() || Number(amount) < 0.01}>
-            {busy ? 'Planning…' : 'Build my plan'}
-          </button>
-        </form>
-        {goalError && <p role="alert">{goalError}</p>}
-      </div>
-
-      {goal && (
-        <div className="goal-card">
-          <div className="goal-title">
-            <strong>{goal.name}</strong>
-            <span>{goal.target_eur.toFixed(0)} €</span>
-          </div>
-
-          <div className="goal-track">
-            <div className="goal-fill" style={{ width: `${pct}%` }} />
-          </div>
-          <small className="goal-progress">
-            {goal.saved_so_far_eur.toFixed(2)} € saved · {pct.toFixed(0)}% of target
-          </small>
-
-          <div className="sim-rows">
-            <div className="sim-row">
-              <span>Your safe-to-save</span>
-              <strong>{goal.safe_to_save_monthly.toFixed(2)} €/month</strong>
-            </div>
-            {goal.weekly_eur && (
-              <div className="sim-row">
-                <span>Weekly target</span>
-                <strong>{goal.weekly_eur.toFixed(2)} €/week</strong>
-              </div>
-            )}
-            {goal.months && (
-              <div className="sim-row">
-                <span>Time to goal</span>
-                <strong>{goal.months} months</strong>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className="welcome">
-        <h1>Money experiment</h1>
-        {draft && <p>Aino suggested {draft.pct}% less on {draft.category.toLowerCase()} for {draft.days} days.</p>}
+        <h1>{draft ? <><SparkIcon size={18} /> Aino’s suggested experiment</> : 'Money experiment'}</h1>
+        {draft && <p><strong>{draft.pct}% less on {draft.category.toLowerCase()} for {draft.days} days</strong>, prefilled from your chat.</p>}
         <p>
           Turn advice into a measurable test. I'll track your progress from your transactions.
         </p>
 
         {experimentError && <p role="alert">{experimentError}</p>}
-        {draft && a && !replace && (
+        {draft && a && !replace && (a.category !== draft.category || a.pct !== draft.pct) && (
           <button className="reset-btn" onClick={() => setReplace(true)}>Set up the suggested experiment</button>
         )}
         {!a || replace ? (
@@ -239,9 +166,9 @@ export function GoalsView({
                 : quote.budget === undefined ? 'The budget preview is unavailable.'
                   : `Target for ${chDays} days: €${quote.budget.toFixed(2)}.`}</p>
             )}
-            {replace && <p>Replacing the experiment clears its simulated progress.</p>}
+            {replace && a && !(draft && a.category === draft.category && a.pct === draft.pct) && <p className="goal-progress">This replaces your current {a.category.toLowerCase()} experiment.</p>}
             <button className="big-cta" onClick={startChallenge} disabled={chBusy || !challengeLoaded}>
-              {chBusy ? 'Starting…' : replace ? 'Replace current experiment' : 'Start experiment'}
+              {chBusy ? 'Starting…' : draft ? 'Start this experiment' : replace && a ? 'Replace current experiment' : 'Start experiment'}
             </button>
           </div>
         ) : (
@@ -279,6 +206,11 @@ export function GoalsView({
                   {ffBusy ? 'Simulating…' : `Fast-forward ${advanceDays} ${advanceDays === 1 ? 'day' : 'days'}`}
                 </button>
               )}
+              {onAsk && a.days_elapsed > 0 && (
+                <button className="reset-btn primary ask-aino" onClick={() => onAsk(`How is my ${a.category.toLowerCase()} experiment going?`)}>
+                  <SparkIcon size={14} /> Ask Aino how it’s going
+                </button>
+              )}
               <button className="reset-btn" onClick={resetExperiment} disabled={ffBusy || resetBusy}>
                 {resetBusy ? 'Resetting…' : 'Reset simulated spending'}
               </button>
@@ -286,6 +218,82 @@ export function GoalsView({
           </div>
         )}
       </div>
+      {goal && (
+        <div className="goal-card">
+          <div className="goal-title">
+            <strong>{goal.name}</strong>
+            <span>{goal.target_eur.toFixed(0)} €</span>
+          </div>
+
+          <div className="goal-track">
+            <div className="goal-fill" style={{ width: `${pct}%` }} />
+          </div>
+          <small className="goal-progress">
+            {goal.saved_so_far_eur.toFixed(2)} € saved · {pct.toFixed(0)}% of target
+          </small>
+
+          <div className="sim-rows">
+            <div className="sim-row">
+              <span>Your safe-to-save</span>
+              <strong>{goal.safe_to_save_monthly.toFixed(2)} €/month</strong>
+            </div>
+            {goal.weekly_eur && (
+              <div className="sim-row">
+                <span>Weekly target</span>
+                <strong>{goal.weekly_eur.toFixed(2)} €/week</strong>
+              </div>
+            )}
+            {goal.months && (
+              <div className="sim-row">
+                <span>Time to goal</span>
+                <strong>{goal.months} months</strong>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <details className="welcome goal-new" open={!goal}>
+        <summary>{goal ? 'Set a different savings goal' : 'Savings goal'}</summary>
+        <p>
+          Tell me what you're saving for. I'll turn your safe-to-save into a weekly plan.
+        </p>
+        <form className="goal-form" onSubmit={submit}>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label="Savings goal name"
+            placeholder="What for? e.g. a bike"
+          />
+          <div className="goal-form-row">
+            <input
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              aria-label="Target amount in euros"
+              placeholder="Amount (EUR)"
+              min="0.01"
+              step="0.01"
+              required
+              type="number"
+              inputMode="decimal"
+            />
+            <input
+              value={months}
+              onChange={(e) => setMonths(e.target.value)}
+              aria-label="Months to reach the goal"
+              placeholder="Months (optional)"
+              min="1"
+              type="number"
+              inputMode="numeric"
+            />
+          </div>
+          <button className="big-cta" disabled={busy || !name.trim() || Number(amount) < 0.01}>
+            {busy ? 'Planning…' : 'Build my plan'}
+          </button>
+        </form>
+        {goalError && <p role="alert">{goalError}</p>}
+      </details>
+
     </main>
   )
 }

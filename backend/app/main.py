@@ -1,7 +1,9 @@
+import json
 from datetime import date
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from openai import APIError
 from pydantic import BaseModel, Field
 
@@ -61,6 +63,7 @@ class ChatRequest(BaseModel):
     end: date | None = None
     basket: str | None = Field(default=None, max_length=40)
     customer_id: str | None = None
+    receipt_id: str | None = Field(default=None, max_length=60)
 
 
 @app.get("/health")
@@ -123,6 +126,25 @@ def chat_endpoint(req: ChatRequest):
         return chat.chat(msgs, cid)
     except APIError as exc:
         raise HTTPException(status_code=503, detail="The chat provider is unavailable.") from exc
+
+
+@app.post("/chat/stream")
+def chat_stream(req: ChatRequest):
+    """Free-form AI chat as server-sent events: tool steps, charts and text arrive live."""
+    cid = req.customer_id or config.DEMO_CUSTOMER_ID
+    if not config.CHAT_API_KEY:
+        raise HTTPException(status_code=503, detail="Free-form chat requires an AI provider.")
+    msgs = [m.model_dump() for m in req.messages]
+
+    def events():
+        try:
+            for event in chat.chat_events(msgs, cid, req.receipt_id, req.transaction_id):
+                yield f"data: {json.dumps(event, ensure_ascii=False, default=str)}\n\n"
+        except Exception:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'The chat provider is unavailable.'})}\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @app.get("/transactions")

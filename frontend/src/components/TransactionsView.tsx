@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { SparkIcon } from './icons'
 import { fetchReceipt, fetchTransactions, type Receipt, type SpendingScope, type TransactionPage } from '../api'
 
 const BASKETS: Record<string, { label: string; reason: string; attention?: boolean }> = {
@@ -8,7 +9,7 @@ const BASKETS: Record<string, { label: string; reason: string; attention?: boole
   savings_investing: { label: 'Savings and investing', reason: 'Money set aside.' },
 }
 
-function ReceiptDetails({ customerId, receiptId }: { customerId: string; receiptId: string }) {
+function ReceiptDetails({ customerId, receiptId, onInsight }: { customerId: string; receiptId: string; onInsight: () => void }) {
   const [open, setOpen] = useState(false)
   const [receipt, setReceipt] = useState<Receipt | null>(null)
   const [failed, setFailed] = useState(false)
@@ -25,7 +26,7 @@ function ReceiptDetails({ customerId, receiptId }: { customerId: string; receipt
 
   return (
     <details className="receipt-details" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>View receipt</summary>
+      <summary>View itemised receipt</summary>
       {open && failed && !receipt && (
         <p role="alert">
           Couldn’t load the receipt.{' '}
@@ -36,7 +37,7 @@ function ReceiptDetails({ customerId, receiptId }: { customerId: string; receipt
       {receipt && (
         <>
 
-          <h4>Spending by category</h4>
+          <h4>{receipt.items.length} items · classified into {receipt.categories.length} product categories</h4>
           <ul aria-label="Category totals">
             {receipt.categories.map((category) => (
               <li key={category.name}>
@@ -56,16 +57,20 @@ function ReceiptDetails({ customerId, receiptId }: { customerId: string; receipt
               ))}
             </ul>
           </details>
+          <button className="reset-btn receipt-insight-btn" onClick={onInsight}>
+            <SparkIcon size={14} /> See more: Aino’s insight on this receipt
+          </button>
         </>
       )}
     </details>
   )
 }
 
-export function TransactionsView({ customerId, scope, onAsk, onClear }: {
+export function TransactionsView({ customerId, scope, onAsk, onAskReceipt, onClear }: {
   customerId: string
   scope: SpendingScope
   onAsk: (transactionId: number, question: string) => void
+  onAskReceipt: (receiptId: string) => void
   onClear: () => void
 }) {
   const [data, setData] = useState<TransactionPage | null>(null)
@@ -126,6 +131,7 @@ export function TransactionsView({ customerId, scope, onAsk, onClear }: {
                   <strong>€{row.amount_eur.toFixed(2)}</strong>
                 </div>
                 <small>{row.date}{row.merchant ? ` · ${row.merchant}` : ''}</small>
+                {row.receipt_id && <span className="receipt-badge">🧾 Itemised receipt</span>}
                 {basket && (
                   <p className="transaction-review">
                     <span className={`review-label ${basket.attention ? 'attention' : 'good'}`}>
@@ -135,8 +141,10 @@ export function TransactionsView({ customerId, scope, onAsk, onClear }: {
                     <span>{basket.reason}</span>
                   </p>
                 )}
-                {row.receipt_id && <ReceiptDetails customerId={customerId} receiptId={row.receipt_id} />}
-                <button className="reset-btn" onClick={() => onAsk(row.id, `Tell me about this €${row.amount_eur.toFixed(2)} ${row.category.toLowerCase()} purchase.`)}>Learn more</button>
+                {row.receipt_id && <ReceiptDetails customerId={customerId} receiptId={row.receipt_id} onInsight={() => onAskReceipt(row.receipt_id!)} />}
+                <button className="reset-btn ask-purchase" onClick={() => onAsk(row.id, row.receipt_id ? 'What does this receipt tell me about my spending?' : `Tell me about this €${row.amount_eur.toFixed(2)} ${row.category.toLowerCase()} purchase.`)}>
+                  <SparkIcon size={13} /> Ask Aino about this purchase
+                </button>
               </article>
             )
           })}

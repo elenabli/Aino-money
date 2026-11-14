@@ -1,40 +1,104 @@
-import type { Persona } from '../api'
-import { ChatIcon } from './icons'
+import { useEffect, useState } from 'react'
+import { fetchWelcome, type AdviserCheckIn, type Persona } from '../api'
+import { SendIcon, SparkIcon } from './icons'
 
 const euros = new Intl.NumberFormat('fi-FI', { style: 'currency', currency: 'EUR' })
+const whole = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
-export function BankHome({ persona, failed, onRetry, onChat, onAccount, onPersona }: {
+type CheckIn = AdviserCheckIn & { recent_categories?: { category: string; amount_eur: number }[] }
+
+const QUICK = ['What kind of spender am I?', 'Am I spending more than people my age?']
+
+export function BankHome({ persona, failed, onRetry, onChat, onAsk, onAccount, onPersona }: {
   persona: Persona | null
   failed: boolean
   onRetry: () => void
   onChat: () => void
+  onAsk: (question: string) => void
   onAccount: () => void
   onPersona: () => void
 }) {
+  const [checkIn, setCheckIn] = useState<CheckIn | null>(null)
+  const [aiReady, setAiReady] = useState(false)
+  const [question, setQuestion] = useState('')
+  const id = persona?.id
+
+  useEffect(() => {
+    if (!id) return
+    let current = true
+    fetchWelcome(id).then((w) => {
+      if (!current) return
+      setCheckIn(w.check_in as CheckIn)
+      setAiReady(w.chat_available)
+    }).catch(() => {})
+    return () => { current = false }
+  }, [id])
+
+  const top = (checkIn?.recent_categories ?? []).slice(0, 3)
+  const max = Math.max(1, ...top.map((row) => row.amount_eur))
+  const change = checkIn ? checkIn.spend_eur - checkIn.previous_eur : 0
+  const goal = checkIn?.goal
+
   return (
     <main className="bank-home">
-      <section className="bank-home-entry" aria-label="Money coach">
-        <button className="bank-coach" disabled={!persona} onClick={onChat}>
-          <span className="bank-coach-icon"><ChatIcon size={23} /></span>
-          <span><strong>Your Aino check-in</strong><small>Recent spending and what you can change</small></span>
-          <span aria-hidden="true">›</span>
-        </button>
-      </section>
+      <div className="home-top">
+        <span>Hei{persona ? `, ${persona.name}` : ''} 👋</span>
+        <button onClick={onPersona}>{persona ? `${persona.name}, ${persona.age}` : 'Demo profile'} ▾</button>
+      </div>
 
-      <section className="bank-bonus" aria-labelledby="bank-home-title">
-        <div className="bank-home-top">
-          <span>Aino Money</span>
-          <button onClick={onPersona}>{persona?.name ?? 'Demo profile'}</button>
+      <section className="aino-hero" aria-label="Aino, your AI money coach">
+        <div className="aino-hero-head">
+          <span className="avatar ai"><SparkIcon size={18} /></span>
+          <div>
+            <strong>Aino noticed</strong>
+            <small>AI money coach · last 14 days</small>
+          </div>
         </div>
-        <h1 id="bank-home-title">Seuraavaan tasoon 98,55 €</h1>
-        <p>Kuukauden bonusostot 301,45 €</p>
-        <div className="bonus-level next"><span>2,5 %</span><span>400 €</span></div>
-        <div className="bonus-level"><span>2,0 %</span><span>300 €</span></div>
-        <div className="bonus-house">
-          <span>Bonusta tulossa</span>
-          <strong>6,03 €</strong>
-        </div>
-        <small>Esimerkkibonus · demo</small>
+
+        {checkIn ? (
+          <>
+            <p className="aino-hero-insight">
+              You spent <strong>{whole.format(checkIn.spend_eur)}</strong> on everyday things
+              {Math.abs(change) >= 1 && <>, <strong className={change > 0 ? 'up' : 'down'}>
+                {whole.format(Math.abs(change))} {change > 0 ? 'more' : 'less'}
+              </strong> than the two weeks before</>}.
+            </p>
+            {top.length > 0 && (
+              <ul className="aino-bars" aria-label="Biggest everyday categories">
+                {top.map((row) => (
+                  <li key={row.category}>
+                    <span>{row.category}</span>
+                    <i style={{ width: `${(row.amount_eur / max) * 100}%` }} />
+                    <b>{whole.format(row.amount_eur)}</b>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {goal && (
+              <p className="aino-goal">🎯 {goal.name}: <b>{whole.format(goal.saved_so_far_eur)}</b> of {whole.format(goal.target_eur)}</p>
+            )}
+          </>
+        ) : (
+          <p className="aino-hero-insight muted">{failed ? 'Couldn’t load your check-in.' : 'Aino is reading your recent transactions…'}</p>
+        )}
+
+        {aiReady ? (
+          <>
+            <form className="aino-ask" onSubmit={(e) => {
+              e.preventDefault()
+              if (question.trim()) onAsk(question.trim())
+            }}>
+              <input aria-label="Ask Aino" value={question} onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask Aino anything…" disabled={!persona} />
+              <button aria-label="Ask" disabled={!question.trim()}><SendIcon /></button>
+            </form>
+            <div className="aino-quick">
+              {QUICK.map((q) => <button key={q} disabled={!persona} onClick={() => onAsk(q)}><SparkIcon size={12} />{q}</button>)}
+            </div>
+          </>
+        ) : (
+          <button className="big-cta" disabled={!persona} onClick={onChat}>Talk to Aino</button>
+        )}
       </section>
 
       <section className="bank-accounts" aria-labelledby="bank-accounts-title">
@@ -50,7 +114,7 @@ export function BankHome({ persona, failed, onRetry, onChat, onAccount, onPerson
           )}
           <div className="bank-card-label">
             <strong>S-Etukortti Visa Debit</strong>
-            <small>Demokortti</small>
+            <small>Demokortti · synthetic data</small>
           </div>
         </div>
       </section>

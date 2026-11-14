@@ -14,6 +14,21 @@ AI money coach over synthetic S-Bank transaction data. Mobile web app (Vite/Reac
 | Goals | Savings goal (weekly target, months, progress from real savings deposits) + Money experiment (spend-cap challenge with fast-forward). | `GET/POST /goal`, `/challenges` |
 | Simulate | Random spend from the user's own history → Jev or demo rules classify → persisted as simulated → budget burns down. Alternatives: wait for salary / trim / make a goal. | `GET /random_tx`, `POST/DELETE /simulate` |
 
+**AI chat, live (`POST /chat/stream`).** Free-form questions stream as server-sent events: each
+tool Aino calls appears as a step ("Comparing with peers your age"), charts arrive as they are
+drawn, then the answer text, then 2–3 AI-generated follow-up questions. The model can request a
+chart with the `show_chart` tool (`category_trend`, `category_split`, `baskets`, `peers`,
+`what_if`, `budget`, `merchants`). The model picks the view, and `app/charts.py` computes every
+value from the ledger. Answers keep a **How Aino worked this out** record of the steps.
+**Receipt insight.** On an itemised Prisma receipt in the transaction list, **See more: Aino's insight
+on this receipt** opens the chat with `receipt_id`. `app/receipt_insight.py` groups the classified
+lines into shopping groups (fruit & veg, dairy & eggs, protein, snacks & sweets, drinks, household…)
+and labels each group as an essential, treat, convenience or extra. For each group it compares this
+month so far with the user's usual for the same days (3-month average) and gives an evaluation
+(*On your usual pace*, *45% above usual*, flagged amber for treats). The card renders instantly, then
+Claude explains it. The `grocery_groups` chart view shows every group this month vs usual.
+Home leads with an **Aino noticed** card (14-day check-in) and an ask box that opens the chat.
+
 Coach answers link to their date- and category-filtered transaction evidence. What-if savings answers can prefill a spend-cap experiment, with the euro budget previewed before confirmation.
 
 ## Core concepts

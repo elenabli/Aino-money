@@ -7,7 +7,7 @@ import { PersonaView } from './components/PersonaView'
 import { TransactionsView } from './components/TransactionsView'
 import { PaydayCard } from './components/PaydayCard'
 import { SimulateView } from './components/SimulateView'
-import { ChartIcon, ChatIcon, DiceIcon, HomeIcon, TargetIcon, UserIcon } from './components/icons'
+import { ChartIcon, ChatIcon, DiceIcon, HomeIcon, SparkIcon, TargetIcon, UserIcon } from './components/icons'
 
 import { BankHome } from './components/BankHome'
 
@@ -90,10 +90,10 @@ export default function App() {
   return (
     <div className="phone">
       {tab !== 'home' && <header>
-        <div className="avatar">{persona ? persona.name[0] : 'S'}</div>
+        <div className={tab === 'chat' ? 'avatar ai' : 'avatar'}>{tab === 'chat' ? <SparkIcon /> : persona ? persona.name[0] : 'S'}</div>
         <div className="who">
-          <strong>{persona ? `${persona.name}, ${persona.age} · Aino Money` : 'Aino Money · Money coach'}</strong>
-          <small>{persona ? `${persona.label} · Synthetic data` : 'Choose a persona to begin'}</small>
+          <strong>{tab === 'chat' ? <>Aino<span className="ai-badge">AI COACH</span></> : persona ? `${persona.name}, ${persona.age} · Aino Money` : 'Aino Money · Money coach'}</strong>
+          <small>{tab === 'chat' && persona ? `Talks with ${persona.name}’s own transactions · synthetic data` : persona ? `${persona.label} · Synthetic data` : 'Choose a persona to begin'}</small>
         </div>
       </header>}
 
@@ -104,6 +104,7 @@ export default function App() {
             failed={homeLoadFailed}
             onRetry={() => { setHomeLoadFailed(false); setHomeAttempt((attempt) => attempt + 1) }}
             onChat={() => openTab('chat')}
+            onAsk={(question) => { setLinkedTurn({ question }); setTab('chat') }}
             onAccount={() => openTransactions()}
             onPersona={() => openTab('persona')}
           />
@@ -120,12 +121,14 @@ export default function App() {
           <ChatView
             key={cid}
             customerId={cid}
+            firstName={persona!.name}
             active={tab === 'chat'}
             linkedTurn={linkedTurn}
             onConsumeTurn={() => setLinkedTurn(null)}
             onOpenSimulation={() => openTab('sim')}
             onOpenPayday={() => openTab('payday')}
             onOpenTransactions={openTransactions}
+            onViewGoal={() => openTab('goals')}
             onOpenGoals={(experiment) => { setDraft(experiment); setTab('goals') }}
           />
         </div>
@@ -138,7 +141,8 @@ export default function App() {
           }} /></div>
       )}
       {cid && tab === 'goals' && (
-        <div className="view"><GoalsView customerId={cid} draft={draft} onResetSimulation={() => setSimulationVersion((version) => version + 1)} /></div>
+        <div className="view"><GoalsView customerId={cid} draft={draft} onResetSimulation={() => setSimulationVersion((version) => version + 1)}
+          onAsk={(question) => { setLinkedTurn({ question }); setTab('chat') }} /></div>
       )}
       {cid && tab === 'transactions' && (
         <div className="view">
@@ -147,8 +151,12 @@ export default function App() {
             customerId={cid}
             scope={scope}
             onClear={() => openTransactions()}
+            onAskReceipt={(receiptId) => {
+              setLinkedTurn({ question: 'What does this receipt tell me about my spending?', scope: { receipt_id: receiptId } })
+              setTab('chat')
+            }}
             onAsk={(transactionId, question) => {
-              setLinkedTurn({ question, prompt: 'transaction_detail', scope: { transaction_id: transactionId } })
+              setLinkedTurn({ question, scope: { transaction_id: transactionId } })
               setTab('chat')
             }}
           />
