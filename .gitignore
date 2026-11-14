@@ -1,0 +1,14 @@
+.venv/
+node_modules/
+dist/
+.env
+backend/data/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local challenge data and generated demo receipts
+/tx_junction_transactions.txt
+/tx_customers_junction.csv
+/mtg_*.csv
+/receipts/

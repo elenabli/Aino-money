@@ -1,0 +1,6 @@
+duckdb==2.0.0
+fastapi==0.162.7
+openai==3.50.0
+python-dotenv==1.2.4
+typesafe-sdk==0.7.5
+uvicorn==0.54.0
