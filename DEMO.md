@@ -28,7 +28,7 @@ Persona: **Sofia, 35**, saving €15,000 for an apartment deposit (synthetic dat
    is slower, and refreshing empties the chat.
 4. Use a phone viewport (Chrome DevTools → iPhone 14 Pro, 393×852). Hide the bookmarks bar.
    Zoom to 110–125% so the text is readable on video.
-5. Check Home shows **Hei, Sofia** and the **Aino noticed** card. If it doesn't, pick Sofia under **Persona**.
+5. Refresh: the app opens on the **Aino Money** start screen. Tap **Sofia, 35** (top card, marked *Demo*) to land on Home with the **Aino noticed something** card.
 
 Answers take 5–10 s. Let the first one play in real time so viewers see the live steps,
 then speed up the waits 2–4× in editing.
@@ -39,8 +39,8 @@ then speed up the waits 2–4× in editing.
 
 | Time | Do this | Say this (voice-over) |
 | --- | --- | --- |
-| **0:00–0:10** | Home screen. Hover over the **Aino noticed** card: everyday spend, three category bars, apartment goal. | “This is S-mobiili with Aino, an AI money coach that talks with your own transactions. Before Sofia asks anything, Aino has already spotted what changed in her last two weeks.” |
-| **0:10–0:28** | Tap **✦ What kind of spender am I?** Let the live steps tick off. The **three money baskets** donut appears, then the answer. | “Watch it work. Aino picks the data it needs, sorts her spending into S-Bank’s three baskets and draws the chart. The chart is computed from her ledger, so the AI can’t invent a number.” |
+| **0:00–0:10** | Start on the persona screen and tap **Sofia**. The familiar S-Pankki home screen opens: bonus banner, accounts. Point to the **✦ Aino noticed something** card at the top (*€587 on everyday things in 2 weeks…*) and tap it. | “This is the S-Pankki app with Aino built in, an AI money coach that talks with your own transactions. It has already noticed something in Sofia’s last two weeks.” |
+| **0:10–0:28** | The chat opens with Aino’s greeting. Tap the suggestion **✦ What kind of spender am I?** Let the live steps tick off. The **three money baskets** donut appears, then the answer. | “Watch it work. Aino picks the data it needs, sorts her spending into S-Bank’s three baskets and draws the chart. The chart is computed from her ledger, so the AI can’t invent a number.” |
 | **0:28–0:42** | Tap **Koti** → **S-Tili**. The second row is a **Prisma Herttoniemi €27.15** purchase with **🧾 Itemised receipt**. Tap **View itemised receipt**: *10 items · classified into 10 product categories*. | “Here’s what makes us different. A bank only sees ‘€27 at Prisma’. We downloaded real Prisma receipts and classified every line, from chocolate to kitchen roll.” |
 | **0:42–1:02** | Tap **✦ See more: Aino’s insight on this receipt**. The receipt card appears at once: a colour bar of what she bought, then each category with what she spent this month, a marker for her usual, and an evaluation badge (*On your usual pace*, *45% above usual*…). Tap one category to show its items. Aino’s explanation streams in below. | “Aino groups the receipt into everyday categories. For each one it checks this month against her usual and gives a verdict. Then it explains what stands out, what’s going well, and one small, kind idea.” |
 | **1:02–1:12** | Tap the follow-up **Show all my grocery categories this month**. If it isn’t offered, type it. The chart shows all grocery categories, this month vs usual. | “One more tap and she sees every grocery category this month, straight from her receipts.” |

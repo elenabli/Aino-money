@@ -40,6 +40,27 @@ PERSONAS = [
         "label": "Pensioner",
         "description": "Fixed income, wants clarity on everyday spending.",
     },
+    {
+        "id": "CUST00541",
+        "name": "Laura",
+        "age": 38,
+        "label": "Spending more than earning",
+        "description": "Flexible spending has crept above income for the last few months.",
+    },
+    {
+        "id": "CUST04216",
+        "name": "Antti",
+        "age": 37,
+        "label": "Hit by unexpected costs",
+        "description": "A large one-off cost pushed the account into the red.",
+    },
+    {
+        "id": "CUST05012",
+        "name": "Pekka",
+        "age": 53,
+        "label": "Irregular income",
+        "description": "Freelance pay that changes month to month, with savings as a cushion.",
+    },
 ]
 
 
@@ -78,13 +99,13 @@ def personas():
         has_receipts = con.execute("SELECT 1 FROM customers WHERE customer_id = ?", [receipts.CUSTOMER_ID]).fetchone()
     available = PERSONAS
     if has_receipts:
-        available = [*PERSONAS, {
+        available = [{
             "id": receipts.CUSTOMER_ID,
             "name": "Sofia",
             "age": receipts.AGE,
             "label": "Budget + grocery receipts",
             "description": "Explore a synthetic budget with itemised supermarket purchases.",
-        }]
+        }, *PERSONAS]
     for p in available:
         bal = tools.current_balance(p["id"])["balance_eur"] or 0
         income = tools.monthly_income(p["id"])["median_monthly_income"]

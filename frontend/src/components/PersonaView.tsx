@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { fetchPersonas, type Persona } from '../api'
+import { SparkIcon } from './icons'
 
+const AVATAR_COLORS = ['#007a4d', '#5b7ea8', '#c2557a', '#8f6bb8', '#e0654a', '#2a9d9d', '#b07d1a']
+const euros = new Intl.NumberFormat('fi-FI', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
+
+/** Start screen: choose whose (synthetic) money to explore before entering the bank app. */
 export function PersonaView({
   selected,
   onSelect,
@@ -9,7 +14,6 @@ export function PersonaView({
   onSelect: (p: Persona) => void
 }) {
   const [personas, setPersonas] = useState<Persona[]>([])
-
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [attempt, setAttempt] = useState(0)
 
@@ -28,13 +32,13 @@ export function PersonaView({
   }, [attempt])
 
   return (
-    <main>
-      <div className="welcome">
-        <h1>Choose a demo persona</h1>
-        <p>
-          Pick a persona to open their coach and explore their synthetic transactions.
-        </p>
-      </div>
+    <main className="persona-start">
+      <section className="persona-hero">
+        <span className="avatar ai"><SparkIcon size={22} /></span>
+        <h1>Aino Money</h1>
+        <p>An AI money coach inside the S-Pankki app. Choose whose money to explore.</p>
+        <small>All people and transactions are synthetic demo data.</small>
+      </section>
 
       {status === 'loading' && <p role="status" className="loading">Loading personas…</p>}
       {status === 'error' && (
@@ -48,23 +52,22 @@ export function PersonaView({
       )}
 
       <div className="persona-list">
-        {personas.map((p) => (
+        {personas.map((p, i) => (
           <button
             key={p.id}
             className={`persona-card ${selected === p.id ? 'active' : ''}`}
             onClick={() => onSelect(p)}
           >
-            <div className="persona-avatar">{p.name[0]}</div>
+            <div className="persona-avatar" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>{p.name[0]}</div>
             <div className="persona-info">
-              <strong>
-                {p.name}, {p.age} · {p.label}
-              </strong>
+              <strong>{p.name}, {p.age}</strong>
+              <span className="persona-label">{p.label}</span>
               <small>{p.description}</small>
               <small className="persona-stats">
-                income {p.median_income_eur.toFixed(0)} €/mo · balance {p.balance_eur.toFixed(0)} €
+                {euros.format(p.median_income_eur)}/mo income · {euros.format(p.balance_eur)} balance
               </small>
             </div>
-            <span className="persona-check">{selected === p.id ? 'Active' : ''}</span>
+            <span className="persona-go" aria-hidden="true">{i === 0 ? 'Demo ›' : '›'}</span>
           </button>
         ))}
       </div>

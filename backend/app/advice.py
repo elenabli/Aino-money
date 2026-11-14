@@ -18,6 +18,18 @@ PROFILES = {
         "Plan for the days ahead",
         "Riitta values predictable spending on a fixed income. Use plain language, explain dates and amounts, and prioritise bills and a cash buffer before discretionary cuts or savings targets. Use a calm, respectful tone without slang, pressure or assumptions about technical ability.",
     ),
+    "CUST00541": (
+        "Bring spending back under income",
+        "Laura's spending has run above income for several months. Be warm and practical. Lead with the gap and the one or two flexible categories driving it, and suggest one realistic weekly cap. Never shame or imply irresponsibility; acknowledge what is already working.",
+    ),
+    "CUST04216": (
+        "Recover from an unexpected cost",
+        "Antti's account went into the red after a large one-off cost. Be calm and reassuring. Prioritise getting back above zero before payday and covering bills, then suggest building a small buffer for the next surprise. Explain the 'unexpected' basket simply; don't lecture about the past purchase.",
+    ),
+    "CUST05012": (
+        "Plan around irregular income",
+        "Pekka's freelance income varies month to month. Use direct, numbers-first language. Frame budgets around a low-income month, the savings cushion, and smoothing spending across months. Avoid assuming a fixed salary or a payday.",
+    ),
     CUSTOMER_ID: (
         "See what changed in your spending",
         "Sofia wants to understand her purchases while saving for an apartment. Lead with receipt and spending patterns. Use measured, nonjudgmental language. Identify receipt-backed treat spending and offer a modest grocery experiment when relevant to her apartment goal; never imply that sweets are bad or every small shopping trip is wasteful.",

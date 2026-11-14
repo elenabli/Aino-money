@@ -14,7 +14,7 @@ const eur = (v: number) => `€${v.toFixed(2)}`
 const day = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
 /** One classified receipt: composition, then per-category month pace with an evaluation. */
-export function ReceiptInsightCard({ data }: { data: ReceiptInsight }) {
+export function ReceiptInsightCard({ data, settled = false }: { data: ReceiptInsight; settled?: boolean }) {
   const colors = data.groups.map((g, i) => {
     if (g.kind !== 'staple') return KIND_COLORS[g.kind]
     const nth = data.groups.slice(0, i).filter((prev) => prev.kind === 'staple').length
@@ -22,7 +22,7 @@ export function ReceiptInsightCard({ data }: { data: ReceiptInsight }) {
   })
 
   return (
-    <figure className="receipt-card">
+    <figure className={settled ? 'receipt-card settled' : 'receipt-card'}>
       <header className="receipt-card-head">
         <span className="receipt-icon" aria-hidden="true">🧾</span>
         <div>

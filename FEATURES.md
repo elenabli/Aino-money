@@ -8,7 +8,7 @@ AI money coach over synthetic S-Bank transaction data. Mobile web app (Vite/Reac
 
 | Tab | What it does | Data flow |
 |---|---|---|
-| Persona | Pick a demo customer (Emma 20 / Mikko 29 / Riitta 63). Whole app switches to their data. Persisted in localStorage. | `GET /personas` |
+| Start screen | The app opens on a persona picker (Sofia 35 with receipts, Emma 20, Mikko 29, Riitta 63, Laura 38 spending above income, Antti 37 overdrawn after an unexpected cost, Pekka 53 with irregular income). Choosing one opens Home; the profile pill on Home switches persona. Persisted in localStorage. | `GET /personas` |
 | Coach | Opens after persona selection with a heads-up and three data-backed starter questions. Free-form chat uses the configured AI provider. | `POST /chat` |
 | Month | Balance/income/spent/safe-to-spend cards; "What do you want to track?" — category donut, basket donut, balance line, peer benchmark bars; coaching plan card, recorded transactions with basket labels and links to Aino, and a payday affordability check. | `GET /monthly`, `/benchmark`, `/coaching_plan` |
 | Goals | Savings goal (weekly target, months, progress from real savings deposits) + Money experiment (spend-cap challenge with fast-forward). | `GET/POST /goal`, `/challenges` |
@@ -27,7 +27,7 @@ and labels each group as an essential, treat, convenience or extra. For each gro
 month so far with the user's usual for the same days (3-month average) and gives an evaluation
 (*On your usual pace*, *45% above usual*, flagged amber for treats). The card renders instantly, then
 Claude explains it. The `grocery_groups` chart view shows every group this month vs usual.
-Home leads with an **Aino noticed** card (14-day check-in) and an ask box that opens the chat.
+Home keeps the S-Pankki look (bonus banner, accounts) with a compact **Aino noticed something** card on top: a one-line 14-day insight that opens the chat.
 
 Coach answers link to their date- and category-filtered transaction evidence. What-if savings answers can prefill a spend-cap experiment, with the euro budget previewed before confirmation.
 

@@ -59,6 +59,15 @@ for (_group, _kind), _names in _DEFS.items():
     for _name in _names:
         GROUPS[_name] = (_group, _kind)
 
+# The generated (synthetic) receipts used in the cloud demo carry group-level names already.
+_SYNTHETIC = {
+    "Fruit & vegetables": "Fruit & veg", "Dairy & eggs": "Dairy & eggs", "Bakery & grains": "Bread & grains",
+    "Meat, fish & plant proteins": "Protein", "Pantry": "Pantry", "Frozen & ready meals": "Ready meals",
+    "Snacks & sweets": "Snacks & sweets", "Drinks": "Drinks", "Household & personal care": "Household & care",
+}
+for _alias, _group in _SYNTHETIC.items():
+    GROUPS.setdefault(_alias, next((g, k) for (g, k) in _DEFS if g == _group))
+
 KIND_LABELS = {
     "staple": "Everyday essential", "treat": "Treat", "convenience": "Convenience",
     "household": "Household essential", "fun": "Extra", "transport": "Transport",

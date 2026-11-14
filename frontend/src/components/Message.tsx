@@ -93,8 +93,9 @@ export function Message({ msg, onOpenTransactions, onOpenGoals }: {
             {!steps.length && <li className="active">Reading your question</li>}
           </ol>
         )}
-        {msg.receipt && <ReceiptInsightCard data={msg.receipt} />}
-        {charts.map((chart, i) => <ChartCard key={i} chart={chart} />)}
+        {/* A finished streamed answer replaces the live one: don't replay the intro animations. */}
+        {msg.receipt && <ReceiptInsightCard data={msg.receipt} settled={!working && !!msg.steps?.length} />}
+        {charts.map((chart, i) => <ChartCard key={i} chart={chart} animate={working || !msg.steps?.length} />)}
         {(visibleText || (msg.pending && !steps.length)) && (
           <div className="bubble">
             {visibleText ? renderAssistantText(visibleText) : (

@@ -28,7 +28,7 @@ const SHORT_LABELS: Record<string, string> = {
 const TOOLTIP = { borderRadius: 10, fontSize: 12, border: '1px solid #e3e9e5' }
 const eur = (v: unknown, digits = 0) => `${Number(v ?? 0).toLocaleString('en-IE', { maximumFractionDigits: digits })} €`
 
-function Donut({ chart }: { chart: ChartSpec }) {
+function Donut({ chart, animate }: { chart: ChartSpec; animate: boolean }) {
   const isPct = chart.unit === 'pct'
   const rawValues = chart.values ?? []
   const total = isPct ? 100 : rawValues.reduce((a, b) => a + b, 0) || 1
@@ -42,7 +42,7 @@ function Donut({ chart }: { chart: ChartSpec }) {
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={data} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="92%"
-              paddingAngle={2} strokeWidth={0} animationDuration={700}>
+              paddingAngle={2} strokeWidth={0} isAnimationActive={animate} animationDuration={700}>
               {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
             </Pie>
             <RTooltip formatter={(v) => (isPct ? `${Number(v).toFixed(1)}%` : eur(v, 2))} contentStyle={TOOLTIP} />
@@ -86,7 +86,7 @@ const shortEur = (v: unknown) => {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n)}`
 }
 
-export function ChartCard({ chart }: { chart: ChartSpec }) {
+export function ChartCard({ chart, animate = true }: { chart: ChartSpec; animate?: boolean }) {
   const data =
     chart.kind === 'line' && chart.series
       ? chart.labels.map((label, i) => {
@@ -104,7 +104,7 @@ export function ChartCard({ chart }: { chart: ChartSpec }) {
   const axis = { fontSize: 10, fill: '#6b7670' }
 
   return (
-    <figure className="chart-card">
+    <figure className={animate ? 'chart-card' : 'chart-card settled'}>
       <figcaption className="chart-title">{chart.title}</figcaption>
       {chart.highlight && (
         <div className="chart-highlight">
@@ -123,12 +123,12 @@ export function ChartCard({ chart }: { chart: ChartSpec }) {
               <Legend wrapperStyle={{ fontSize: 10 }} iconType="circle" iconSize={8} />
               {chart.series.map((s, i) => (
                 <Line key={s.name} type="monotone" dataKey={s.name} stroke={COLORS[i % COLORS.length]}
-                  strokeWidth={2.5} dot={{ r: 2.5 }} animationDuration={700} />
+                  strokeWidth={2.5} dot={{ r: 2.5 }} isAnimationActive={animate} animationDuration={700} />
               ))}
             </LineChart>
           </ResponsiveContainer>
         ) : chart.kind === 'donut' ? (
-          <Donut chart={chart} />
+          <Donut chart={chart} animate={animate} />
         ) : (
           <ResponsiveContainer width="100%" height={crowded ? 230 : 210}>
             <BarChart data={data} margin={{ top: 18, right: 4, left: -14, bottom: 0 }} barGap={2}>
@@ -143,13 +143,13 @@ export function ChartCard({ chart }: { chart: ChartSpec }) {
               <RTooltip formatter={(v) => eur(v, 2)} contentStyle={TOOLTIP} cursor={{ fill: '#f0f4f1' }} />
               {chart.values2 && <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />}
               <Bar dataKey="value" name={chart.series_names?.[0] ?? 'Spent'} fill={COLORS[0]}
-                radius={[5, 5, 0, 0]} animationDuration={700}>
+                radius={[5, 5, 0, 0]} isAnimationActive={animate} animationDuration={700}>
                 <LabelList dataKey="value" position="top" formatter={shortEur}
                   style={{ fontSize: 9, fill: '#00603c', fontWeight: 700 }} />
               </Bar>
               {chart.values2 && (
                 <Bar dataKey="value2" name={chart.series_names?.[1] ?? 'Compare'} fill="#f2a33a"
-                  radius={[5, 5, 0, 0]} animationDuration={700}>
+                  radius={[5, 5, 0, 0]} isAnimationActive={animate} animationDuration={700}>
                   <LabelList dataKey="value2" position="top" formatter={shortEur}
                     style={{ fontSize: 9, fill: '#8a5a12', fontWeight: 600 }} />
                 </Bar>

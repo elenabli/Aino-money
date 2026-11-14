@@ -7,20 +7,19 @@ import { PersonaView } from './components/PersonaView'
 import { TransactionsView } from './components/TransactionsView'
 import { PaydayCard } from './components/PaydayCard'
 import { SimulateView } from './components/SimulateView'
-import { ChartIcon, ChatIcon, DiceIcon, HomeIcon, SparkIcon, TargetIcon, UserIcon } from './components/icons'
+import { ChartIcon, ChatIcon, DiceIcon, HomeIcon, SparkIcon, TargetIcon } from './components/icons'
 
 import { BankHome } from './components/BankHome'
 
 const TABS = [
   { id: 'home', label: 'Koti', Icon: HomeIcon },
-  { id: 'persona', label: 'Persona', Icon: UserIcon },
   { id: 'chat', label: 'Chat', Icon: ChatIcon },
   { id: 'month', label: 'Spending', Icon: ChartIcon },
   { id: 'goals', label: 'Goals', Icon: TargetIcon },
   { id: 'sim', label: 'Simulate', Icon: DiceIcon },
 ] as const
 
-type Tab = (typeof TABS)[number]['id'] | 'transactions' | 'payday'
+type Tab = (typeof TABS)[number]['id'] | 'persona' | 'transactions' | 'payday'
 
 function storedPersona(): Persona | null {
   try {
@@ -35,7 +34,8 @@ function storedPersona(): Persona | null {
 
 export default function App() {
   const [persona, setPersona] = useState(storedPersona)
-  const [tab, setTab] = useState<Tab>('home')
+  // The demo always starts by choosing whose money to explore.
+  const [tab, setTab] = useState<Tab>('persona')
   const [homeLoadFailed, setHomeLoadFailed] = useState(false)
   const [homeAttempt, setHomeAttempt] = useState(0)
   const personaId = persona?.id
@@ -77,7 +77,7 @@ export default function App() {
       setDraft(undefined)
     }
     setPersona(p)
-    setTab('chat')
+    setTab('home')
     try {
       localStorage.setItem('aino_money_persona', JSON.stringify(p))
     } catch {
@@ -89,7 +89,7 @@ export default function App() {
 
   return (
     <div className="phone">
-      {tab !== 'home' && <header>
+      {tab !== 'home' && tab !== 'persona' && <header>
         <div className={tab === 'chat' ? 'avatar ai' : 'avatar'}>{tab === 'chat' ? <SparkIcon /> : persona ? persona.name[0] : 'S'}</div>
         <div className="who">
           <strong>{tab === 'chat' ? <>Aino<span className="ai-badge">AI COACH</span></> : persona ? `${persona.name}, ${persona.age} · Aino Money` : 'Aino Money · Money coach'}</strong>
@@ -104,7 +104,6 @@ export default function App() {
             failed={homeLoadFailed}
             onRetry={() => { setHomeLoadFailed(false); setHomeAttempt((attempt) => attempt + 1) }}
             onChat={() => openTab('chat')}
-            onAsk={(question) => { setLinkedTurn({ question }); setTab('chat') }}
             onAccount={() => openTransactions()}
             onPersona={() => openTab('persona')}
           />
@@ -171,20 +170,20 @@ export default function App() {
         </div>
       )}
 
-      <nav className="tabbar" aria-label="Demo navigation">
+      {tab !== 'persona' && <nav className="tabbar" aria-label="Demo navigation">
         {TABS.filter(({ id }) => id !== 'sim' || tab === 'sim').map(({ id, label, Icon }) => (
           <button
             key={id}
             className={tab === id || (id === 'month' && (tab === 'transactions' || tab === 'payday')) ? 'active' : ''}
             aria-current={tab === id ? 'page' : undefined}
-            disabled={id !== 'home' && id !== 'persona' && !cid}
+            disabled={id !== 'home' && !cid}
             onClick={() => openTab(id)}
           >
             <Icon />
             <span>{label}</span>
           </button>
         ))}
-      </nav>
+      </nav>}
     </div>
   )
 }

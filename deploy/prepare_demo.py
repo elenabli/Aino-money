@@ -10,7 +10,7 @@ import duckdb
 from backend.app import config, db, receipts, tools
 
 OUTPUT = ROOT / "deploy" / "data" / "aino-money.duckdb"
-CUSTOMERS = ("CUST00001", "CUST02220", "CUST05013")
+CUSTOMERS = ("CUST00001", "CUST02220", "CUST05013", "CUST00541", "CUST04216", "CUST05012")
 
 
 def main():
@@ -59,7 +59,7 @@ def main():
         if not tools.apartment_plan(receipts.CUSTOMER_ID) or not receipts.grocery_insights(receipts.CUSTOMER_ID):
             raise RuntimeError("The synthetic Sofia profile is missing its budget or receipt insights")
         temporary.replace(OUTPUT)
-        print(f"Prepared {count} synthetic receipts and four demo profiles")
+        print(f"Prepared {count} synthetic receipts and {len(CUSTOMERS) + 1} demo profiles")
     finally:
         temporary.unlink(missing_ok=True)
 
